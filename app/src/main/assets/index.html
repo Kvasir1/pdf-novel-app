@@ -1,0 +1,978 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="mobile-web-app-capable" content="yes">
+<style>[hidden]{display:none!important}img{max-width:100%}</style>
+</head>
+<body>
+<title>PDF 소설 서재</title>
+<style>
+/* 배치: 서재(표지 격자) ↔ 읽기 화면(세로로 이어지는 원본 쪽, 아래쪽에 엄지가 닿는 도구 띠) */
+:root{
+  --bg:#edf0ea; --surface:#ffffff; --fg:#1c221f; --muted:#5e6964; --line:#d2d8d1;
+  --accent:#2d4b8c; --accent-fg:#ffffff; --accent-soft:#e1e8f6;
+  --danger:#a33b3b; --hl:rgba(255,204,0,.45);
+  --bar:rgba(255,255,255,.94); --shadow:0 2px 12px rgba(20,30,25,.12);
+  --scroll-bg:#d7dcd5; --thumb-bg:#c9cfc8;
+  --font:-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14171a; --surface:#1e2327; --fg:#e4e8e3; --muted:#9ba49f; --line:#2e353a;
+    --accent:#8fb1ff; --accent-fg:#0d1830; --accent-soft:#24304a;
+    --danger:#e07a7a; --hl:rgba(255,204,0,.40);
+    --bar:rgba(30,35,39,.94); --shadow:0 2px 12px rgba(0,0,0,.45);
+    --scroll-bg:#0f1214; --thumb-bg:#2a3035;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14171a; --surface:#1e2327; --fg:#e4e8e3; --muted:#9ba49f; --line:#2e353a;
+  --accent:#8fb1ff; --accent-fg:#0d1830; --accent-soft:#24304a;
+  --danger:#e07a7a; --hl:rgba(255,204,0,.40);
+  --bar:rgba(30,35,39,.94); --shadow:0 2px 12px rgba(0,0,0,.45);
+  --scroll-bg:#0f1214; --thumb-bg:#2a3035;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.5;-webkit-tap-highlight-color:transparent;overflow-x:hidden}
+*{box-sizing:border-box}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+button:focus-visible,input:focus-visible,label:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input{font:inherit;color:inherit}
+h1,h2,h3{margin:0;text-wrap:balance}
+[hidden]{display:none!important}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface);min-height:40px;white-space:nowrap}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn.danger{color:var(--danger);border-color:var(--danger)}
+.btn.small{padding:5px 10px;min-height:32px;font-size:13px}
+.muted{color:var(--muted)}
+.ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+/* ---------- 서재 ---------- */
+#library{max-width:1100px;margin:0 auto;padding-block:20px 40px;padding-inline:16px}
+.lib-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}
+.lib-head h1{font-size:22px;letter-spacing:-.01em}
+.lib-head h1 small{display:block;font-size:13px;font-weight:400;color:var(--muted);letter-spacing:0}
+.storage{margin:4px 0 18px;font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
+.storage .pill{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:12px}
+.shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:18px 14px}
+@media (max-width:420px){.shelf{grid-template-columns:repeat(2,1fr);gap:16px 12px}}
+.card{display:flex;flex-direction:column;gap:8px;min-width:0;position:relative}
+.cover{display:block;width:100%;aspect-ratio:3/4;max-width:100%;border-radius:8px;overflow:hidden;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);position:relative;padding:0;text-align:left}
+.cover img{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
+.cover .prog{position:absolute;left:0;right:0;bottom:0;height:5px;background:rgba(0,0,0,.18)}
+.cover .prog i{display:block;height:100%;background:var(--accent)}
+.cover .done{position:absolute;top:8px;left:8px;padding:2px 8px;border-radius:999px;background:var(--accent);color:var(--accent-fg);font-size:11px}
+.card .meta{min-width:0;display:flex;gap:4px;align-items:flex-start}
+.card .meta .t{flex:1;min-width:0}
+.card .name{font-weight:600;font-size:14px;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.card .sub{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;margin-top:2px}
+.card .more{flex:none;width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:var(--muted)}
+.card .more:hover{background:var(--accent-soft);color:var(--accent)}
+.empty{margin-top:28px;padding:36px 20px;border:1.5px dashed var(--line);border-radius:14px;text-align:center;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:10px}
+.empty strong{color:var(--fg);font-size:17px}
+.empty p{margin:0;max-width:34em}
+body.dragging #library{outline:3px dashed var(--accent);outline-offset:-6px;border-radius:14px}
+.drop-hint{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(45,75,140,.18);font-size:20px;font-weight:600;pointer-events:none;z-index:50}
+.notice{margin:0 0 16px;padding:12px 14px;border-radius:10px;background:var(--accent-soft);color:var(--fg);font-size:14px}
+.notice.bad{background:rgba(163,59,59,.12)}
+
+/* ---------- 읽기 화면 ---------- */
+#reader{position:fixed;inset:0;background:var(--scroll-bg);z-index:20;overflow:hidden}
+.scroller{position:absolute;inset:0;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.pages{position:relative;display:flex;flex-direction:column;align-items:center;gap:10px;padding:calc(56px + env(safe-area-inset-top,0px)) 8px calc(72px + env(safe-area-inset-bottom,0px))}
+.page{position:relative;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.25);flex:none;max-width:100%;overflow:hidden}
+.page canvas{display:block;width:100%;height:100%}
+.page .pn{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9aa;font-size:28px;font-variant-numeric:tabular-nums;user-select:none;pointer-events:none}
+.page .hl{position:absolute;background:var(--hl);border-radius:2px;pointer-events:none;mix-blend-mode:multiply}
+#reader.night .page{background:#1b1b1b}
+#reader.night .page canvas{filter:invert(1) hue-rotate(180deg) contrast(.92)}
+#reader.night .page .hl{mix-blend-mode:screen}
+
+/* 글자 보기 — 글과 그림을 화면 너비에 맞춰 다시 흐르게 */
+.flow{display:none;max-width:42em;margin:0 auto;padding:calc(60px + env(safe-area-inset-top,0px)) 18px calc(80px + env(safe-area-inset-bottom,0px));font-size:var(--flow-size,19px);line-height:1.75;color:var(--fg);overflow-wrap:anywhere;word-break:keep-all;min-width:0}
+#reader.flowmode{background:var(--surface)}
+#reader.flowmode .pages{display:none}
+#reader.flowmode .flow{display:block}
+#reader.night.flowmode{--surface:#141618;--fg:#dadcd8;--muted:#8b938e;--accent-soft:#263040;--line:#2a3136;--hl:rgba(255,204,0,.35);--bar:rgba(20,22,24,.94)}
+.fp{min-height:140px;padding-bottom:.6em;display:flow-root}
+.fp .pmark{font-size:.68em;color:var(--muted);text-align:center;margin:1.6em 0 1.1em;letter-spacing:.12em;font-variant-numeric:tabular-nums;user-select:none}
+.fp .pmark::before,.fp .pmark::after{content:"";display:inline-block;width:2.4em;height:1px;background:var(--line);vertical-align:middle;margin:0 .8em}
+.fp p{margin:0 0 .85em}
+.fp h3{font-size:1.22em;line-height:1.4;margin:1.1em 0 .6em;font-weight:700}
+.fp figure{margin:1em auto;text-align:center;max-width:100%}
+.fp img{max-width:100%;height:auto;border-radius:6px;display:inline-block;vertical-align:middle}
+.fp mark{background:var(--hl);color:inherit;border-radius:2px;padding:0 1px}
+.fp .skel{color:var(--muted);font-size:.78em;text-align:center;padding:2.2em 0}
+.fp .skel .spin.small{width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:-3px;margin-right:8px}
+.menurow:disabled{opacity:.6;cursor:default}
+.fp .noText{color:var(--muted);font-size:.85em;text-align:center;padding:1em 0}
+#modeBtn{min-width:52px}
+#modeBtn.flow .ico{stroke:var(--accent)}
+#modeBtn.flow{color:var(--accent)}
+.bar{position:absolute;left:0;right:0;z-index:3;display:flex;align-items:center;gap:4px;background:var(--bar);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-color:var(--line);transition:transform .22s ease}
+.bar.top{top:0;padding:6px 8px;padding-top:calc(6px + env(safe-area-inset-top,0px));border-bottom:1px solid var(--line)}
+.bar.bottom{bottom:0;padding:6px 6px;padding-bottom:calc(6px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);justify-content:space-between}
+#reader.chrome-hidden .bar.top{transform:translateY(-110%)}
+#reader.chrome-hidden .bar.bottom{transform:translateY(110%)}
+.bar button{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:46px;min-height:48px;padding:4px 8px;border-radius:10px;font-size:12px;color:var(--fg)}
+.bar button:hover{background:var(--accent-soft)}
+.bar button.on{color:var(--accent)}
+.bar button.on .ico{fill:var(--accent);stroke:var(--accent)}
+.bar.top .ttl{flex:1;min-width:0;text-align:center;font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 6px}
+.bar.top .back{flex-direction:row;font-size:14px;gap:2px;padding-left:4px;padding-right:10px}
+#pageBtn{font-size:15px;font-variant-numeric:tabular-nums;min-width:84px;flex-direction:row}
+.zoomgrp{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.zoomgrp button{min-width:40px;border-radius:0;font-size:16px}
+.zoomgrp button.fit{font-size:12px}
+@media (max-width:380px){.zoomgrp button{min-width:34px}.bar button{min-width:40px;padding:4px 5px}}
+.status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;color:var(--fg);background:var(--scroll-bg);z-index:2;font-size:15px}
+.spin{width:28px;height:28px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}.bar{transition:none}}
+
+/* 아래에서 올라오는 판(찾기·책갈피·이동·메뉴) — 손가락으로 누르기 쉽게 크게 */
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:4;background:var(--surface);color:var(--fg);border-top:1px solid var(--line);border-radius:18px 18px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.18);max-height:85%;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0px);font-size:17px}
+.sheet .sh{display:flex;align-items:center;gap:8px;padding:14px 12px 12px 20px;border-bottom:1px solid var(--line)}
+.sheet .sh h2{flex:1;font-size:19px}
+.sheet .sh .x{width:46px;height:46px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;color:var(--muted)}
+.sheet .sh .x .ico{width:24px;height:24px}
+.sheet .sb{flex:1 1 auto;overflow:auto;padding:14px 16px 20px;display:flex;flex-direction:column;gap:12px;min-height:0}
+.sheet .sb>div{display:flex;flex-direction:column;gap:12px}
+.sheet .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.sheet input[type=text],.sheet input[type=search],.sheet input[type=number]{flex:1;min-width:0;padding:13px 14px;border:1px solid var(--line);border-radius:12px;background:var(--bg);font-size:17px;min-height:50px}
+.sheet input[type=range]{width:100%;height:36px;accent-color:var(--accent)}
+.sheet .btn{min-height:50px;font-size:16px;padding:10px 18px;border-radius:12px}
+.sheet .btn.small{min-height:46px;font-size:16px}
+.menurow{display:flex;align-items:center;gap:12px;width:100%;min-height:58px;padding:12px 16px;border-radius:12px;background:var(--bg);border:1px solid var(--line);font-size:17px;text-align:left}
+.menurow:hover{background:var(--accent-soft)}
+.menurow.danger{color:var(--danger)}
+.menurow .ico{width:24px;height:24px}
+.list{display:flex;flex-direction:column;gap:4px}
+.item{display:flex;gap:12px;align-items:flex-start;padding:13px 12px;min-height:56px;border-radius:12px;text-align:left;width:100%}
+.item:hover{background:var(--accent-soft)}
+.item .pg{flex:none;min-width:56px;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:700;font-size:16px;padding-top:2px}
+.item .tx{flex:1;min-width:0;font-size:16px;line-height:1.5;color:var(--fg);overflow-wrap:anywhere}
+.item .tx b{background:var(--hl);font-weight:600;border-radius:2px}
+.item .tx .note{display:block;color:var(--muted);font-size:15px;margin-top:2px}
+.bmrow{display:flex;gap:4px;align-items:flex-start}
+.bmrow .item{flex:1}
+.bmrow .mini{flex:none;width:46px;height:46px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;color:var(--muted);margin-top:5px}
+.bmrow .mini .ico{width:24px;height:24px}
+.bmrow .mini:hover{background:var(--accent-soft);color:var(--accent)}
+.noteedit{display:flex;gap:8px;padding:0 12px 10px 68px}
+.noteedit input{flex:1;min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:16px}
+.sheet .hint{font-size:15px;color:var(--muted);margin:0;line-height:1.5}
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px 4px;border-bottom:1px solid var(--line);font-size:17px;line-height:1.4;cursor:pointer}
+.toggle:last-child{border-bottom:0}
+.toggle .muted{font-size:14px;display:block}
+.toggle input{width:28px;height:28px;flex:none;accent-color:var(--accent)}
+.info dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:8px 14px;font-size:16px}
+.info dt{color:var(--muted)}
+.info dd{margin:0;font-variant-numeric:tabular-nums;min-width:0;overflow-wrap:anywhere}
+
+/* 서재에서 책 옆 ⋮ 를 누르면 뜨는 판 */
+.libsheet{position:fixed;inset:0;z-index:60}
+.libsheet .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.35)}
+.libsheet .sheet{max-width:600px;margin:0 auto}
+.libsheet .sheet p{margin:0;font-size:17px;line-height:1.5}
+
+/* 알림 띠 */
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;z-index:99;max-width:min(92vw,520px);text-align:center;box-shadow:var(--shadow)}
+body.in-library .toast{bottom:28px}
+</style>
+
+<div id="library">
+  <header class="lib-head">
+    <h1>PDF 소설 서재<small>PDF를 넣어 두고 원본 그대로 읽습니다 · 읽던 곳, 책갈피는 이 기기 안에 남습니다</small></h1>
+    <div class="lib-actions">
+      <label class="btn primary" for="fileInput" tabindex="0">
+        <svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>PDF 넣기
+      </label>
+      <input id="fileInput" type="file" accept="application/pdf,.pdf" multiple hidden>
+    </div>
+  </header>
+  <p id="storageLine" class="storage"></p>
+  <div id="engineNotice" class="notice bad" hidden>PDF를 읽는 엔진을 불러오지 못했습니다. 인터넷에 연결된 상태에서 이 페이지를 다시 열어 주세요.</div>
+  <div id="shelf" class="shelf"></div>
+  <div id="emptyState" class="empty" hidden>
+    <svg class="ico" style="width:40px;height:40px;color:var(--muted)" viewBox="0 0 24 24"><path d="M4 19V5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M14 3v5h5M8 13h8M8 17h5"/></svg>
+    <strong>서재가 비어 있습니다</strong>
+    <p>위의 「PDF 넣기」를 누르거나, 컴퓨터에서는 PDF 파일을 이 창에 끌어다 놓으세요. 폰에서는 파일 고르기 창에 구글 드라이브가 같이 보이므로 드라이브에 있는 PDF를 바로 골라 넣어도 됩니다.</p>
+    <p>넣은 PDF는 이 브라우저 안에만 저장되고 밖으로 나가지 않습니다.</p>
+  </div>
+</div>
+<div id="dropHint" class="drop-hint" hidden>여기에 놓으면 서재에 들어갑니다</div>
+
+<div id="reader" hidden>
+  <div id="scroller" class="scroller"><div id="pages" class="pages"></div><div id="flow" class="flow"></div></div>
+  <div id="status" class="status" hidden><div class="spin"></div><div id="statusText">여는 중…</div></div>
+  <header id="topBar" class="bar top">
+    <button id="backBtn" class="back" title="서재로 돌아가기"><svg class="ico" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>서재</button>
+    <div id="bookTitle" class="ttl"></div>
+    <button id="menuBtn" title="메뉴"><svg class="ico" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg></button>
+  </header>
+  <footer id="bottomBar" class="bar bottom">
+    <button id="pageBtn" title="쪽 이동">1 / 1</button>
+    <button id="bmBtn" title="이 쪽에 책갈피"><svg class="ico" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg>책갈피</button>
+    <button id="searchBtn" title="글자 찾기"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>찾기</button>
+    <button id="modeBtn" title="보기 방식 바꾸기"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h13"/></svg><span id="modeLbl">글자</span></button>
+    <div class="zoomgrp">
+      <button id="zoomOut" title="작게">−</button>
+      <button id="zoomIn" title="크게">＋</button>
+    </div>
+  </footer>
+
+  <div id="sheet" class="sheet" hidden>
+    <div class="sh"><h2 id="sheetTitle"></h2><button id="sheetClose" class="x" title="닫기"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="sb">
+      <div id="paneSearch" hidden>
+        <form id="searchForm" class="row">
+          <input id="searchInput" type="search" placeholder="찾을 글자 (띄어쓰기는 무시합니다)" autocomplete="off">
+          <button class="btn primary" type="submit">찾기</button>
+        </form>
+        <p id="searchStatus" class="hint"></p>
+        <div id="searchResults" class="list"></div>
+      </div>
+      <div id="paneBm" hidden>
+        <button id="bmToggleHere" class="menurow"><svg class="ico" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg><span>이 쪽에 책갈피 넣기</span></button>
+        <p id="bmCount" class="hint"></p>
+        <div id="bmList" class="list"></div>
+      </div>
+      <div id="paneJump" hidden>
+        <form id="jumpForm" class="row">
+          <input id="jumpInput" type="number" min="1" step="1" placeholder="쪽 번호" inputmode="numeric">
+          <button class="btn primary" type="submit">이동</button>
+        </form>
+        <input id="jumpRange" type="range" min="1" max="1" value="1">
+        <p id="jumpHint" class="hint"></p>
+      </div>
+      <div id="paneMenu" hidden>
+        <button id="prepareBtn" class="menurow"><svg class="ico" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M4 19h16"/></svg><span>이 책 전체 미리 준비 (다음부터 바로 뜨게)</span></button>
+        <button id="zoomFit" class="menurow"><svg class="ico" viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/></svg><span>원본 보기를 화면 너비에 맞춤</span></button>
+        <label class="toggle"><span>밤 모드 <span class="muted">원본 보기에서는 색 반전이라 그림 색이 뒤집혀 보입니다</span></span><input id="nightToggle" type="checkbox"></label>
+        <label class="toggle"><span>화면을 두드리면 위아래 띠 숨기기</span><input id="tapToggle" type="checkbox" checked></label>
+        <p class="hint">「글자」 보기는 PDF에서 글과 그림을 뽑아 화면 너비에 맞춰 다시 흐르게 합니다 — 글씨를 키워도 잘리지 않습니다. 「원본」 보기는 PDF 모양 그대로입니다.</p>
+        <div class="info"><dl id="bookInfo"></dl></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="libSheet" class="libsheet" hidden>
+  <div class="backdrop" id="libBackdrop"></div>
+  <div class="sheet">
+    <div class="sh"><h2 id="libSheetTitle"></h2><button id="libSheetClose" class="x" title="닫기"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div id="libSheetBody" class="sb"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="pdf.min.js"></script>
+<script>
+(function(){
+'use strict';
+const $=s=>document.querySelector(s);
+const pdfjs=window.pdfjsLib;
+if(pdfjs){ pdfjs.GlobalWorkerOptions.workerSrc='pdf.worker.min.js'; }
+else { $('#engineNotice').hidden=false; }
+
+/* ---------------- 저장 (IndexedDB) ---------------- */
+const DB_NAME='pdf-novel-shelf';
+let dbPromise=null;
+function openDB(){
+  if(dbPromise) return dbPromise;
+  dbPromise=new Promise((res,rej)=>{
+    let r; try{ r=indexedDB.open(DB_NAME,2); }catch(e){ rej(e); return; }
+    r.onupgradeneeded=()=>{ const d=r.result;
+      if(!d.objectStoreNames.contains('books')) d.createObjectStore('books',{keyPath:'id'});
+      if(!d.objectStoreNames.contains('files')) d.createObjectStore('files',{keyPath:'id'});
+      if(!d.objectStoreNames.contains('flow')) d.createObjectStore('flow',{keyPath:'key'}); };
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error||new Error('db open failed'));
+  });
+  return dbPromise;
+}
+async function tx(store,mode,fn){
+  const d=await openDB();
+  return new Promise((res,rej)=>{
+    const t=d.transaction(store,mode); let req;
+    try{ req=fn(t.objectStore(store)); }catch(e){ rej(e); return; }
+    t.oncomplete=()=>res(req&&('result'in req)?req.result:undefined);
+    t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error||new Error('aborted'));
+  });
+}
+const dbAll=s=>tx(s,'readonly',st=>st.getAll());
+const dbGet=(s,id)=>tx(s,'readonly',st=>st.get(id));
+const dbPut=(s,v)=>tx(s,'readwrite',st=>st.put(v));
+const dbDel=(s,id)=>tx(s,'readwrite',st=>st.delete(id));
+const dbDelPrefix=(s,prefix)=>tx(s,'readwrite',st=>st.delete(IDBKeyRange.bound(prefix,prefix+'￿')));
+const dbCountPrefix=(s,prefix)=>tx(s,'readonly',st=>st.count(IDBKeyRange.bound(prefix,prefix+'￿')));
+function lsGet(k,d){ try{ const v=localStorage.getItem(k); return v===null?d:JSON.parse(v);}catch(e){ return d; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+
+/* ---------------- 공통 ---------------- */
+let toastT=0;
+function toast(msg,sticky){ const t=$('#toast'); t.textContent=msg; t.hidden=false; clearTimeout(toastT); if(!sticky) toastT=setTimeout(()=>{t.hidden=true;},2600); }
+function hideToast(){ clearTimeout(toastT); $('#toast').hidden=true; }
+const fmtBytes=n=>n>=1e9?(n/1e9).toFixed(2)+' GB':n>=1e6?(n/1e6).toFixed(1)+' MB':Math.round(n/1e3)+' KB';
+const fmtDate=t=>{ const d=new Date(t); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const newId=()=>(crypto.randomUUID?crypto.randomUUID():'b'+Date.now().toString(36)+Math.random().toString(36).slice(2,8));
+
+/* ---------------- 서재 ---------------- */
+let books=[];
+async function loadShelf(){
+  try{ books=await dbAll('books'); }catch(e){ console.error(e); books=[]; $('#storageLine').textContent='이 브라우저에서는 저장 공간을 쓸 수 없어 서재를 불러오지 못했습니다.'; }
+  books.sort((a,b)=>(b.openedAt||0)-(a.openedAt||0));
+  renderShelf(); updateStorageLine();
+}
+function renderShelf(){
+  const shelf=$('#shelf'); shelf.replaceChildren();
+  $('#emptyState').hidden=books.length>0;
+  for(const b of books){
+    const pct=b.pages?Math.min(100,Math.round(((b.lastPage||1)-1)/Math.max(1,b.pages-1)*100)):0;
+    const card=document.createElement('div'); card.className='card'; card.dataset.id=b.id;
+    card.innerHTML=`
+      <button class="cover" title="열기">
+        ${b.cover?`<img src="${b.cover}" alt="">`:''}
+        ${pct>=100?'<span class="done">다 읽음</span>':''}
+        <span class="prog"><i style="width:${pct}%"></i></span>
+      </button>
+      <div class="meta">
+        <div class="t"><div class="name">${esc(b.title)}</div>
+        <div class="sub">${b.pages}쪽 · ${pct>0?`읽은 곳 ${b.lastPage}쪽 (${pct}%)`:'아직 안 읽음'}${b.prepared?' · 미리 준비됨':''}</div></div>
+        <button class="more" title="더 보기"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="12" cy="19" r="1.3"/></svg></button>
+      </div>`;
+    card.querySelector('.cover').addEventListener('click',()=>openBook(b.id));
+    card.querySelector('.more').addEventListener('click',e=>{ e.stopPropagation(); openCardMenu(card,b); });
+    shelf.appendChild(card);
+  }
+}
+function closeCardMenus(){ $('#libSheet').hidden=true; }
+function openCardMenu(card,b){
+  const body=$('#libSheetBody'); $('#libSheetTitle').textContent=b.title;
+  const view=mode=>{
+    if(mode==='main') body.innerHTML=`
+      <button class="menurow" data-a="open"><svg class="ico" viewBox="0 0 24 24"><path d="M4 19V5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M14 3v5h5"/></svg><span>열기</span></button>
+      <button class="menurow" data-a="rename"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h4l10-10-4-4L4 16v4zM13 7l4 4"/></svg><span>이름 바꾸기</span></button>
+      <button class="menurow" data-a="reset"><svg class="ico" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg><span>읽은 곳 처음으로</span></button>
+      <button class="menurow danger" data-a="del"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg><span>서재에서 지우기</span></button>`;
+    else if(mode==='rename') body.innerHTML=`<p class="hint">새 이름</p><div class="row"><input type="text" id="renameInput" value="${esc(b.title)}" aria-label="새 이름"></div><div class="row"><button class="btn primary" data-a="rename-ok">바꾸기</button><button class="btn" data-a="back">취소</button></div>`;
+    else if(mode==='del') body.innerHTML=`<p>「${esc(b.title)}」을(를) 서재에서 지울까요? 책갈피도 함께 사라집니다.</p><div class="row"><button class="btn danger" data-a="del-ok">지우기</button><button class="btn" data-a="back">취소</button></div>`;
+  };
+  view('main'); $('#libSheet').hidden=false;
+  body.onclick=async e=>{
+    const a=e.target.closest('[data-a]')?.dataset.a; if(!a) return;
+    if(a==='open'){ closeCardMenus(); openBook(b.id); }
+    else if(a==='rename'){ view('rename'); const inp=$('#renameInput'); inp.focus(); inp.select(); inp.addEventListener('keydown',ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); body.querySelector('[data-a="rename-ok"]').click(); } }); }
+    else if(a==='rename-ok'){ const v=$('#renameInput').value.trim(); if(v){ b.title=v; await dbPut('books',b).catch(()=>{}); } closeCardMenus(); renderShelf(); }
+    else if(a==='reset'){ b.lastPage=1; b.lastFrac=0; await dbPut('books',b).catch(()=>{}); closeCardMenus(); renderShelf(); toast('읽은 곳을 처음으로 되돌렸습니다'); }
+    else if(a==='del'){ view('del'); }
+    else if(a==='del-ok'){ try{ await dbDel('files',b.id); await dbDel('books',b.id); await dbDelPrefix('flow',b.id+':'); }catch(err){ toast('지우지 못했습니다: '+(err.message||err)); } closeCardMenus(); await loadShelf(); toast('지웠습니다'); }
+    else if(a==='back'){ view('main'); }
+  };
+}
+$('#libSheetClose').addEventListener('click',closeCardMenus);
+$('#libBackdrop').addEventListener('click',closeCardMenus);
+
+async function updateStorageLine(){
+  const el=$('#storageLine'); const parts=[];
+  const total=books.reduce((s,b)=>s+(b.size||0),0);
+  parts.push(`<span>${books.length}권 · ${fmtBytes(total)}</span>`);
+  try{ if(navigator.storage&&navigator.storage.estimate){ const e=await navigator.storage.estimate(); if(e.quota) parts.push(`<span>이 브라우저가 내준 공간 약 ${fmtBytes(e.quota)}</span>`); } }catch(err){}
+  try{ if(navigator.storage&&navigator.storage.persisted){ const p=await navigator.storage.persisted(); parts.push(p?`<span class="pill">보관 고정됨</span>`:`<span class="pill" title="브라우저가 공간이 모자라면 지울 수 있습니다">보관 고정 안 됨</span>`); } }catch(err){}
+  el.innerHTML=parts.join('');
+}
+async function askPersist(){ try{ if(navigator.storage&&navigator.storage.persist){ await navigator.storage.persist(); } }catch(e){} }
+
+/* ---- PDF 넣기 ---- */
+async function importFiles(list){
+  if(!pdfjs){ toast('PDF 엔진이 없어 넣을 수 없습니다. 인터넷 연결 뒤 다시 열어 주세요.'); return; }
+  const files=[...list].filter(f=>/\.pdf$/i.test(f.name)||f.type==='application/pdf');
+  if(!files.length){ toast('PDF 파일만 넣을 수 있습니다'); return; }
+  await askPersist();
+  let n=0, ok=0;
+  for(const f of files){ n++; toast(`넣는 중… ${n}/${files.length} · ${f.name}`,true);
+    try{ await importOne(f); ok++; }catch(e){ console.error(e); toast(`「${f.name}」을(를) 넣지 못했습니다: ${e.message||e}`); await new Promise(r=>setTimeout(r,1800)); }
+  }
+  hideToast(); await loadShelf();
+  if(ok) toast(ok===1?'서재에 넣었습니다':`${ok}권을 서재에 넣었습니다`);
+}
+async function importOne(f){
+  const buf=await f.arrayBuffer();
+  const id=newId();
+  const doc=await pdfjs.getDocument({data:new Uint8Array(buf.slice(0))}).promise;
+  const pages=doc.numPages;
+  const p1=await doc.getPage(1);
+  const v0=p1.getViewport({scale:1});
+  const vp=p1.getViewport({scale:260/v0.width});
+  const c=document.createElement('canvas'); c.width=Math.round(vp.width); c.height=Math.round(vp.height);
+  await p1.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+  const cover=c.toDataURL('image/jpeg',.82);
+  doc.destroy();
+  const title=f.name.replace(/\.pdf$/i,'');
+  await dbPut('files',{id,data:buf});
+  await dbPut('books',{id,title,fileName:f.name,size:buf.byteLength,pages,addedAt:Date.now(),openedAt:Date.now(),lastPage:1,lastFrac:0,bookmarks:[],cover});
+}
+$('#fileInput').addEventListener('change',e=>{ importFiles(e.target.files); e.target.value=''; });
+document.querySelector('label[for=fileInput]').addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); $('#fileInput').click(); } });
+let dragDepth=0;
+document.addEventListener('dragenter',e=>{ if(!R){ e.preventDefault(); dragDepth++; document.body.classList.add('dragging'); $('#dropHint').hidden=false; } });
+document.addEventListener('dragover',e=>{ if(!R) e.preventDefault(); });
+document.addEventListener('dragleave',e=>{ if(!R){ dragDepth=Math.max(0,dragDepth-1); if(!dragDepth){ document.body.classList.remove('dragging'); $('#dropHint').hidden=true; } } });
+document.addEventListener('drop',e=>{ if(R) return; e.preventDefault(); dragDepth=0; document.body.classList.remove('dragging'); $('#dropHint').hidden=true; if(e.dataTransfer&&e.dataTransfer.files.length) importFiles(e.dataTransfer.files); });
+
+/* ---------------- 읽기 화면 ---------------- */
+let R=null;             // 지금 열린 책의 상태
+const scroller=$('#scroller'), pagesEl=$('#pages'), readerEl=$('#reader');
+const GAP=10, MAX_FIT_WIDTH=1000, MAX_PIXELS=16e6;
+const settings={ night:lsGet('night',false), tap:lsGet('tapHide',true), flowFont:lsGet('flowFont',19), viewMode:lsGet('viewMode',null) };
+readerEl.classList.toggle('night',!!settings.night);
+$('#nightToggle').checked=!!settings.night; $('#tapToggle').checked=settings.tap!==false;
+
+function showReader(on){ readerEl.hidden=!on; $('#library').hidden=on; document.body.classList.toggle('in-library',!on); }
+function setStatus(msg){ const s=$('#status'); if(msg){ $('#statusText').textContent=msg; s.hidden=false; } else s.hidden=true; }
+
+async function openBook(id){
+  const b=books.find(x=>x.id===id); if(!b) return;
+  if(!pdfjs){ toast('PDF 엔진이 없어 열 수 없습니다. 인터넷 연결 뒤 다시 열어 주세요.'); return; }
+  closeCardMenus();
+  showReader(true); setStatus('여는 중…'); $('#bookTitle').textContent=b.title; readerEl.classList.remove('chrome-hidden'); closeSheet();
+  let file; try{ file=await dbGet('files',id); }catch(e){ file=null; }
+  if(!file||!file.data){ setStatus(null); showReader(false); toast('저장된 파일을 찾지 못했습니다. PDF를 다시 넣어 주세요.'); return; }
+  const gen=(R?R.gen:0)+1;
+  let doc;
+  try{ doc=await pdfjs.getDocument({data:new Uint8Array(file.data.slice(0))}).promise; }
+  catch(e){ console.error(e); setStatus(null); showReader(false); toast('PDF를 열지 못했습니다: '+(e.message||e)); return; }
+  const p1=await doc.getPage(1); const v=p1.getViewport({scale:1});
+  R={book:b,doc,gen,num:doc.numPages,dims:Array.from({length:doc.numPages},()=>({w:v.width,h:v.height})),dimsKnown:new Set([1]),
+     scale:1,fit:true,els:[],tops:[],heights:[],rendered:new Set(),rendering:new Map(),pageCache:new Map(),textCache:new Map(),
+     hits:new Map(),query:'',cur:b.lastPage||1,saveT:0,searchGen:0,dimsDone:false,
+     mode:'page',flowEls:[],flowBuilt:new Set(),flowBuilding:new Map(),flowPending:new Map(),flowCache:new Map(),flowUrls:[],flowRegime:null,flowWant:[],flowPumping:false,preparing:false,prepareAll:false};
+  b.openedAt=Date.now(); dbPut('books',b).catch(()=>{});
+  buildPages(); buildFlowSkeleton(); applyFlowFont(false);
+  setMode(settings.viewMode||(scroller.clientWidth<700?'flow':'page'), true);
+  if(R.fit) R.scale=fitScale(); sizePages(); measure();
+  setStatus(null);
+  goTo(Math.min(Math.max(1,b.lastPage||1),R.num), b.lastFrac||0, true);
+  updateBmButton();
+  loadDimsProgressively();
+}
+function setMode(mode, initial){
+  if(!R) return; const prev=initial?null:{page:R.cur,frac:currentFrac()};
+  R.mode=mode; settings.viewMode=mode; lsSet('viewMode',mode);
+  readerEl.classList.toggle('flowmode',mode==='flow');
+  $('#modeBtn').classList.toggle('flow',mode==='flow'); $('#modeLbl').textContent=mode==='flow'?'글자':'원본';
+  if(mode==='flow'){ for(const [i,t] of R.rendering){ try{ t.cancel(); }catch(e){} } R.rendering.clear(); for(const i of R.rendered) clearPage(i); R.rendered.clear(); }
+  if(prev){ measure(); goTo(prev.page,prev.frac,true); toast(mode==='flow'?'글자 보기 — 글씨를 키워도 잘리지 않습니다':'원본 보기 — PDF 모양 그대로'); }
+}
+$('#modeBtn').addEventListener('click',()=>{ if(R) setMode(R.mode==='flow'?'page':'flow'); });
+function buildPages(){
+  pagesEl.replaceChildren(); R.els=[];
+  const frag=document.createDocumentFragment();
+  for(let i=0;i<R.num;i++){ const d=document.createElement('div'); d.className='page'; d.dataset.page=i+1; d.innerHTML=`<span class="pn">${i+1}</span>`; frag.appendChild(d); R.els.push(d); }
+  pagesEl.appendChild(frag);
+}
+function fitScale(){ const avail=Math.min(scroller.clientWidth-16, MAX_FIT_WIDTH); return Math.max(0.2, avail/R.dims[Math.min(R.cur,R.num)-1].w); }
+function sizePages(){
+  // 그려 둔 그림을 모두 치우고 새 크기로 다시 그린다
+  for(const [i,t] of R.rendering){ try{ t.cancel(); }catch(e){} } R.rendering.clear();
+  for(const i of R.rendered){ clearPage(i); } R.rendered.clear();
+  for(let i=0;i<R.num;i++){ const el=R.els[i]; const w=R.dims[i].w*R.scale, h=R.dims[i].h*R.scale; el.style.width=w+'px'; el.style.height=h+'px'; }
+}
+function applyScale(keep){
+  if(!R) return;
+  const prev=keep&&R.mode==='page'?{page:R.cur,frac:currentFrac()}:null;
+  if(R.fit) R.scale=fitScale();
+  sizePages();
+  if(R.mode!=='page') return;
+  measure();
+  if(prev) goTo(prev.page,prev.frac,true);
+  else updateVisible();
+}
+function measure(){ const els=R.mode==='flow'?R.flowEls:R.els; R.tops=els.map(e=>e.offsetTop); R.heights=els.map(e=>e.offsetHeight); }
+function clearPage(i){ const el=R.els[i]; el.replaceChildren(); const s=document.createElement('span'); s.className='pn'; s.textContent=i+1; el.appendChild(s); }
+function pageAt(y){ // y: 스크롤 좌표 → 쪽 번호(0부터)
+  let lo=0, hi=R.num-1;
+  while(lo<hi){ const mid=(lo+hi+1)>>1; if(R.tops[mid]<=y) lo=mid; else hi=mid-1; }
+  return lo;
+}
+function currentFrac(){ if(!R||!R.tops.length) return 0; const i=R.cur-1; const h=R.heights[i]||1; return Math.min(1,Math.max(0,(scroller.scrollTop+56-R.tops[i])/h)); }
+function goTo(page,frac,silent){
+  page=Math.min(Math.max(1,page|0),R.num); const i=page-1;
+  const place=()=>{ const y=R.tops[i]+(frac||0)*R.heights[i]-56+(frac?0:-4); scroller.scrollTop=Math.max(0,y); };
+  place(); R.cur=page; updatePageLabel(); updateVisible(); if(!silent) scheduleSave();
+  // 글자 보기에서 아직 안 만든 쪽이면, 만든 뒤 그 자리로 다시 맞춘다 (자리표 높이와 실제 높이가 다르므로)
+  if(R.mode==='flow'&&frac>0&&!R.flowBuilt.has(i)){ const gen=R.gen; buildFlowPage(i).then(()=>{ if(R&&R.gen===gen&&R.cur===page) place(); }); }
+}
+let scrollRaf=0;
+scroller.addEventListener('scroll',()=>{ if(!R||scrollRaf) return; scrollRaf=requestAnimationFrame(()=>{ scrollRaf=0; onScroll(); }); },{passive:true});
+function onScroll(){
+  if(!R) return;
+  const y=scroller.scrollTop+(R.mode==='flow'?96:scroller.clientHeight*0.4);
+  const i=pageAt(y); const p=i+1;
+  if(p!==R.cur){ R.cur=p; updatePageLabel(); updateBmButton(); }
+  updateVisible(); scheduleSave();
+}
+function updatePageLabel(){ $('#pageBtn').textContent=`${R.cur} / ${R.num}`; }
+function updateVisible(){
+  const top=scroller.scrollTop, bottom=top+scroller.clientHeight;
+  const first=pageAt(top), last=pageAt(bottom);
+  if(R.mode==='flow'){
+    const kf=Math.max(0,first-4), kt=Math.min(R.num-1,last+6);
+    let un=false; for(const i of [...R.flowBuilt]){ if(i<kf||i>kt){ unbuildFlowPage(i); un=true; } }
+    if(un) measure();
+    // 보이는 쪽 먼저, 그 다음 앞으로 4쪽을 미리, 그리고 바로 앞 1쪽 — 한 번에 하나씩 차례로
+    const order=[]; for(let i=first;i<=last;i++) order.push(i); for(let k=1;k<=4;k++) if(last+k<R.num) order.push(last+k); if(first-1>=0) order.push(first-1);
+    R.flowWant=order; pumpFlow();
+    return;
+  }
+  const keepFrom=Math.max(0,first-2), keepTo=Math.min(R.num-1,last+2);
+  for(const i of [...R.rendered]){ if(i<keepFrom||i>keepTo){ clearPage(i); R.rendered.delete(i); } }
+  for(const [i,t] of [...R.rendering]){ if(i<keepFrom||i>keepTo){ try{ t.cancel(); }catch(e){} R.rendering.delete(i); } }
+  const order=[]; for(let i=first;i<=last;i++) order.push(i); if(last+1<R.num) order.push(last+1); if(first-1>=0) order.push(first-1); if(last+2<R.num) order.push(last+2);
+  for(const i of order) renderPage(i);
+}
+async function getPage(n){ let p=R.pageCache.get(n); if(!p){ p=R.doc.getPage(n); R.pageCache.set(n,p); } return p; }
+async function renderPage(i){
+  if(!R||R.rendered.has(i)||R.rendering.has(i)) return;
+  const gen=R.gen, el=R.els[i]; const marker={cancel(){ this.c=true; }};
+  let mine=marker; R.rendering.set(i,marker);
+  try{
+    const page=await getPage(i+1);
+    if(!R||R.gen!==gen||marker.c||R.rendering.get(i)!==marker){ return; }
+    const w=R.dims[i].w*R.scale, h=R.dims[i].h*R.scale;
+    let ratio=Math.min(window.devicePixelRatio||1,3);
+    if(w*h*ratio*ratio>MAX_PIXELS) ratio=Math.sqrt(MAX_PIXELS/(w*h));
+    const vp=page.getViewport({scale:R.scale*ratio});
+    const c=document.createElement('canvas'); c.width=Math.floor(vp.width); c.height=Math.floor(vp.height);
+    const task=page.render({canvasContext:c.getContext('2d',{alpha:false}),viewport:vp});
+    mine=task; R.rendering.set(i,task);
+    await task.promise;
+    if(!R||R.gen!==gen||R.rendering.get(i)!==task) return;
+    el.replaceChildren(c);
+    if(R.hits.has(i+1)) drawHighlights(i);
+    R.rendered.add(i);
+  }catch(e){
+    if(!(e&&e.name==='RenderingCancelledException')) console.error('render',i+1,e);
+  }finally{ if(R&&R.gen===gen&&R.rendering.get(i)===mine) R.rendering.delete(i); }
+}
+async function loadDimsProgressively(){
+  const gen=R.gen; let changed=false;
+  for(let n=2;n<=R.num;n++){
+    if(!R||R.gen!==gen) return;
+    try{ const p=await getPage(n); if(!R||R.gen!==gen) return; const v=p.getViewport({scale:1});
+      if(Math.abs(v.width-R.dims[n-1].w)>0.5||Math.abs(v.height-R.dims[n-1].h)>0.5){
+        const before=R.tops[R.cur-1]-scroller.scrollTop;
+        R.dims[n-1]={w:v.width,h:v.height}; const el=R.els[n-1]; el.style.width=(v.width*R.scale)+'px'; el.style.height=(v.height*R.scale)+'px';
+        changed=true;
+        if(R.mode==='page'){ measure(); if(n-1<R.cur-1){ scroller.scrollTop=R.tops[R.cur-1]-before; } }
+      }
+    }catch(e){}
+    if(n%25===0) await new Promise(r=>setTimeout(r,0));
+  }
+  if(R&&R.gen===gen){ R.dimsDone=true; if(changed&&R.mode==='page') updateVisible(); }
+}
+window.addEventListener('resize',()=>{ if(!R) return; clearTimeout(R.rsT); R.rsT=setTimeout(()=>{ if(!R) return;
+  if(R.mode==='flow'){ const prev={page:R.cur,frac:currentFrac()}; if(R.fit) R.scale=fitScale(); sizePages(); measure(); goTo(prev.page,prev.frac,true); }
+  else if(R.fit) applyScale(true); else { measure(); updateVisible(); } },120); });
+
+/* ---- 글자 보기: 글과 그림을 뽑아 다시 흐르게 ---- */
+const isHangul=ch=>/[가-힣ᄀ-ᇿ㄰-㆏]/.test(ch||'');
+const isCJK=ch=>/[぀-ヿ㐀-䶿一-鿿豈-﫿]/.test(ch||'');
+function buildFlowSkeleton(){
+  const flow=$('#flow'); flow.replaceChildren(); R.flowEls=[];
+  const frag=document.createDocumentFragment();
+  for(let i=0;i<R.num;i++){ const s=document.createElement('section'); s.className='fp'; s.dataset.page=i+1; s.innerHTML=skelHTML(i+1,false); frag.appendChild(s); R.flowEls.push(s); }
+  flow.appendChild(frag);
+}
+function applyFlowFont(keep){
+  const prev=keep&&R&&R.mode==='flow'?{page:R.cur,frac:currentFrac()}:null;
+  $('#flow').style.setProperty('--flow-size',settings.flowFont+'px');
+  if(prev){ measure(); goTo(prev.page,prev.frac,true); }
+}
+function flowFontBy(d){ settings.flowFont=Math.min(36,Math.max(13,settings.flowFont+d)); lsSet('flowFont',settings.flowFont); applyFlowFont(true); toast(`글자 크기 ${settings.flowFont}`); }
+const skelHTML=(n,busy)=>`<div class="skel">${busy?'<span class="spin small"></span>':''}${n}쪽 ${busy?'준비 중…':'(아직 준비 전)'}</div>`;
+function unbuildFlowPage(i){ const sec=R.flowEls[i]; sec.style.minHeight=sec.offsetHeight+'px'; sec.innerHTML=skelHTML(i+1,false); R.flowBuilt.delete(i); }
+// 원하는 쪽(R.flowWant)을 한 번에 하나씩 차례로 준비한다 — 폰에서 여러 쪽을 한꺼번에 그리면 더 느려진다
+function pumpFlow(){
+  if(!R||R.mode!=='flow'||R.flowPumping) return;
+  const next=(R.flowWant||[]).find(i=>!R.flowBuilt.has(i));
+  if(next===undefined) return;
+  R.flowPumping=true;
+  buildFlowPage(next).finally(()=>{ if(R){ R.flowPumping=false; pumpFlow(); } });
+}
+function buildFlowPage(i){
+  if(!R||R.mode!=='flow'||R.flowBuilt.has(i)) return Promise.resolve();
+  if(R.flowBuilding.has(i)) return R.flowBuilding.get(i);
+  const gen=R.gen;
+  const p=(async()=>{
+    try{
+      const sec0=R.flowEls[i]; if(!R.flowCache.has(i+1)&&sec0.querySelector('.skel')) sec0.innerHTML=skelHTML(i+1,true);
+      const blocks=await getFlowBlocks(i+1);
+      if(!R||R.gen!==gen||R.mode!=='flow') return;
+      const sec=R.flowEls[i]; const anchor=R.tops[R.cur-1]-scroller.scrollTop;
+      sec.replaceChildren(renderFlowBlocks(blocks,i+1)); sec.style.minHeight='';
+      R.flowBuilt.add(i); measure();
+      if(i<R.cur-1) scroller.scrollTop=R.tops[R.cur-1]-anchor;
+    }catch(e){ console.error('flow',i+1,e); if(R&&R.gen===gen){ R.flowEls[i].innerHTML=`<div class="noText">${i+1}쪽을 준비하지 못했습니다 — 원본 보기로 확인하세요</div>`; R.flowBuilt.add(i); } }
+    finally{ if(R&&R.flowBuilding.get(i)===p) R.flowBuilding.delete(i); }
+  })();
+  R.flowBuilding.set(i,p);
+  return p;
+}
+function pageLines(t){
+  const its=[];
+  t.items.forEach((it,j)=>{ if(!it.str||!it.str.trim()) return; const tr=it.transform; const size=Math.hypot(tr[2],tr[3])||Math.hypot(tr[0],tr[1])||10; its.push({str:it.str,x:tr[4],y:tr[5],w:it.width||0,size,j}); });
+  its.sort((a,b)=>b.y-a.y);
+  const lines=[];
+  for(const it of its){ const L=lines[lines.length-1]; if(L&&Math.abs(it.y-L.y)<=Math.max(it.size,L.size)*0.45){ L.items.push(it); L.size=Math.max(L.size,it.size); } else lines.push({y:it.y,size:it.size,items:[it]}); }
+  for(const L of lines){
+    L.items.sort((a,b)=>a.x-b.x); let text='', right=-Infinity, size=0, x=Infinity, prev=null;
+    for(const it of L.items){ if(prev){ const gap=it.x-(prev.x+prev.w); if(gap>prev.size*0.22&&!/\s$/.test(text)&&!/^\s/.test(it.str)) text+=' '; } text+=it.str; right=Math.max(right,it.x+it.w); size=Math.max(size,it.size); x=Math.min(x,it.x); prev=it; }
+    L.text=text.replace(/\s+/g,' ').trim(); L.right=right; L.size=size; L.x=x; L.len=L.text.length;
+  }
+  return lines.filter(L=>L.text);
+}
+function pageRight(lines){ let r=0; for(const L of lines) if(L.len>=15) r=Math.max(r,L.right); if(!r) for(const L of lines) r=Math.max(r,L.right); return r; }
+async function detectRegime(){
+  // 이 PDF가 한글 낱말 중간에서 줄을 끊는지(midword) 낱말 단위로 끊는지(keepall) 앞쪽 몇 쪽으로 가늠한다
+  if(R.flowRegime) return R.flowRegime;
+  let amb=0,total=0;
+  for(let n=1;n<=Math.min(R.num,12);n++){
+    let t; try{ t=await getPageText(n); }catch(e){ continue; }
+    const lines=pageLines(t), pr=pageRight(lines);
+    for(let k=0;k<lines.length-1;k++){ const a=lines[k], b=lines[k+1]; const gap=a.y-b.y; if(gap<=0||gap>a.size*2) continue;
+      const ea=a.text[a.text.length-1], sb=b.text[0]; if(!isHangul(ea)||!isHangul(sb)) continue; if(pr-a.right>a.size*3) continue;
+      total++; if(pr-a.right<a.size*0.9) amb++; }
+  }
+  R.flowRegime=(total>=8&&amb/total>0.8)?'midword':'keepall';
+  return R.flowRegime;
+}
+function joinLines(acc,a,b,regime,pr){
+  const lb=b.text; if(!acc) return lb; const ea=acc[acc.length-1], sb=lb[0];
+  if(ea==='-'&&/[A-Za-z]/.test(sb)) return acc.slice(0,-1)+lb;
+  if(isHangul(ea)&&isHangul(sb)){ if(regime==='midword'&&(pr-a.right)<a.size*0.9) return acc+lb; return acc+' '+lb; }
+  if(isHangul(sb)||isHangul(ea)) return acc+' '+lb;
+  if(isCJK(ea)||isCJK(sb)||/[　-〿＀-￯]/.test(ea)) return acc+lb;
+  return acc+' '+lb;
+}
+function buildParagraphs(lines,regime,vp){
+  const pr=pageRight(lines);
+  const gaps=[]; for(let k=1;k<lines.length;k++){ const g=lines[k-1].y-lines[k].y; if(g>0&&g<lines[k].size*3) gaps.push(g); }
+  gaps.sort((a,b)=>a-b); const pitch=gaps.length?gaps[Math.floor(gaps.length/2)]:0;
+  const sz=new Map(); for(const L of lines){ const k=Math.round(L.size*2)/2; sz.set(k,(sz.get(k)||0)+L.len); }
+  let body=0,best=-1; for(const [k,v] of sz) if(v>best){ best=v; body=k; }
+  const paras=[]; let cur=null;
+  for(let k=0;k<lines.length;k++){
+    const L=lines[k], prev=lines[k-1]; let brk=!cur;
+    if(!brk){ const gap=prev.y-L.y;
+      if(gap>pitch*1.45+0.5) brk=true;
+      else if(Math.abs(L.size-prev.size)>Math.max(L.size,prev.size)*0.14) brk=true;
+      else if(L.x>cur.x+L.size*0.9) brk=true;
+      else if(pr-prev.right>prev.size*2.2) brk=true; }
+    if(brk){ cur={type:'p',x:L.x,size:L.size,top:vp.convertToViewportPoint(L.x,L.y+L.size)[1],text:L.text,last:L}; paras.push(cur); }
+    else { cur.text=joinLines(cur.text,cur.last,L,regime,pr); cur.last=L; }
+  }
+  for(const p of paras){ if(p.size>body*1.18&&p.text.length<80) p.type='h'; delete p.last; }
+  return paras;
+}
+async function pageImageRects(page){
+  const OPS=pdfjs.OPS, U=pdfjs.Util; const ops=await page.getOperatorList();
+  let ctm=[1,0,0,1,0,0]; const stack=[]; const rects=[];
+  for(let k=0;k<ops.fnArray.length;k++){ const fn=ops.fnArray[k], a=ops.argsArray[k];
+    if(fn===OPS.save) stack.push(ctm);
+    else if(fn===OPS.restore) ctm=stack.pop()||ctm;
+    else if(fn===OPS.transform) ctm=U.transform(ctm,a);
+    else if(fn===OPS.paintFormXObjectBegin){ stack.push(ctm); if(a&&a[0]) ctm=U.transform(ctm,a[0]); }
+    else if(fn===OPS.paintFormXObjectEnd) ctm=stack.pop()||ctm;
+    else if(fn===OPS.paintImageXObject||fn===OPS.paintInlineImageXObject||fn===OPS.paintImageMaskXObject){
+      const pts=[[0,0],[1,0],[0,1],[1,1]].map(p=>U.applyTransform(p,ctm)); const xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]);
+      const r={x1:Math.min(...xs),y1:Math.min(...ys),x2:Math.max(...xs),y2:Math.max(...ys)};
+      if(r.x2-r.x1<40||r.y2-r.y1<40) continue;
+      if(rects.some(q=>Math.abs(q.x1-r.x1)<2&&Math.abs(q.y1-r.y1)<2&&Math.abs(q.x2-r.x2)<2&&Math.abs(q.y2-r.y2)<2)) continue;
+      rects.push(r);
+    }
+  }
+  return rects;
+}
+async function cropImages(page,rects,vp1){
+  // 화면에 보일 크기만큼만 그린다 — 폰에서는 작게 그려야 빠르다
+  const want=Math.min(1400, Math.max(600, scroller.clientWidth*Math.min(window.devicePixelRatio||1,2)));
+  const s=Math.min(2.5,Math.max(0.8,want/vp1.width)); const vp=page.getViewport({scale:s});
+  const c=document.createElement('canvas'); c.width=Math.ceil(vp.width); c.height=Math.ceil(vp.height);
+  await page.render({canvasContext:c.getContext('2d',{alpha:false}),viewport:vp}).promise;
+  const out=[];
+  for(const r of rects){
+    const v=vp.convertToViewportRectangle([r.x1,r.y1,r.x2,r.y2]);
+    const x=Math.max(0,Math.min(v[0],v[2])), y=Math.max(0,Math.min(v[1],v[3]));
+    const w=Math.min(c.width-x,Math.abs(v[2]-v[0])), h=Math.min(c.height-y,Math.abs(v[3]-v[1])); if(w<8||h<8) continue;
+    const cc=document.createElement('canvas'); cc.width=Math.round(w); cc.height=Math.round(h);
+    cc.getContext('2d').drawImage(c,x,y,w,h,0,0,cc.width,cc.height);
+    const blob=await new Promise(res=>cc.toBlob(res,'image/jpeg',0.86)); if(!blob) continue;
+    out.push({type:'img',blob,w:cc.width,h:cc.height,top:Math.min(v[1],v[3])/s,pct:Math.min(100,Math.round((r.x2-r.x1)/vp1.width*100))});
+  }
+  c.width=0; c.height=0;
+  return out;
+}
+function withUrls(blocks){ for(const b of blocks){ if(b.type==='img'&&!b.url&&b.blob){ b.url=URL.createObjectURL(b.blob); R.flowUrls.push(b.url); } } return blocks; }
+async function getFlowBlocks(n){
+  let b=R.flowCache.get(n); if(b) return b;
+  if(R.flowPending.has(n)) return R.flowPending.get(n);
+  const gen=R.gen, key=R.book.id+':'+n;
+  const p=(async()=>{
+    // 미리 준비해 둔 것이 있으면 그걸 쓴다
+    try{ const saved=await dbGet('flow',key); if(saved&&saved.blocks){ if(!R||R.gen!==gen) return saved.blocks; const bb=withUrls(saved.blocks); R.flowCache.set(n,bb); return bb; } }catch(e){}
+    const page=await getPage(n); const t=await getPageText(n); const regime=await detectRegime();
+    const vp1=page.getViewport({scale:1});
+    const paras=buildParagraphs(pageLines(t),regime,vp1);
+    let imgs=[]; try{ const rects=await pageImageRects(page); if(rects.length) imgs=await cropImages(page,rects,vp1); }catch(e){ console.warn('images',n,e); }
+    const blocks=[...paras,...imgs].sort((p,q)=>p.top-q.top);
+    if(!R||R.gen!==gen) return blocks;
+    R.flowCache.set(n,withUrls(blocks));
+    // 한 번 준비한 쪽은 저장해 둔다 — 다음에 열 때 바로 뜨도록
+    dbPut('flow',{key,blocks:blocks.map(x=>x.type==='img'?{type:'img',blob:x.blob,w:x.w,h:x.h,top:x.top,pct:x.pct}:x)}).catch(()=>{});
+    return blocks;
+  })();
+  R.flowPending.set(n,p);
+  try{ return await p; } finally{ if(R&&R.flowPending.get(n)===p) R.flowPending.delete(n); }
+}
+/* ---- 이 책 전체 미리 준비 (결과를 저장해 두어 다음부터 바로 뜨게) ---- */
+async function prepareWholeBook(){
+  if(!R||R.preparing) return; const gen=R.gen; const b=R.book; R.preparing=true; R.prepareAll=true;
+  const btn=$('#prepareBtn'), lbl=btn.querySelector('span');
+  try{
+    for(let n=1;n<=R.num;n++){
+      if(!R||R.gen!==gen) return;
+      if(!R.flowCache.has(n)){ await getFlowBlocks(n); }
+      else if(!(await dbGet('flow',b.id+':'+n).catch(()=>null))){ const blocks=R.flowCache.get(n); await dbPut('flow',{key:b.id+':'+n,blocks:blocks.map(x=>x.type==='img'?{type:'img',blob:x.blob,w:x.w,h:x.h,top:x.top,pct:x.pct}:x)}).catch(()=>{}); }
+      if(n%5===0||n===R.num){ lbl.textContent=`미리 준비 중… ${n}/${R.num}쪽`; }
+      // 읽고 있는 쪽이 먼저다: 화면에 필요한 쪽이 기다리면 잠깐 양보
+      await new Promise(r=>setTimeout(r,0));
+    }
+    b.prepared=true; await dbPut('books',b).catch(()=>{});
+    lbl.textContent='전체 미리 준비됨 ✓'; btn.disabled=true; toast('이 책은 이제 어느 쪽을 열어도 바로 뜹니다');
+  }catch(e){ console.error(e); lbl.textContent='미리 준비 — 중간에 멈춤 (다시 누르면 이어서)'; }
+  finally{ if(R&&R.gen===gen){ R.preparing=false; } }
+}
+$('#prepareBtn').addEventListener('click',()=>{ if(!R) return; if(R.mode!=='flow') setMode('flow'); prepareWholeBook(); });
+function markText(text){
+  const safe=esc(text); const nq=(R.query||'').replace(/\s+/g,''); if(!nq) return safe;
+  const re=new RegExp(nq.split('').map(ch=>ch.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\s*'),'gi');
+  return safe.replace(re,m=>`<mark>${m}</mark>`);
+}
+function renderFlowBlocks(blocks,pageNo){
+  const frag=document.createDocumentFragment();
+  const m=document.createElement('div'); m.className='pmark'; m.textContent=`${pageNo}쪽`; frag.appendChild(m);
+  if(!blocks.length){ const d=document.createElement('div'); d.className='noText'; d.textContent='이 쪽에서는 뽑아낼 글이나 그림이 없습니다 — 원본 보기로 확인하세요'; frag.appendChild(d); return frag; }
+  for(const b of blocks){
+    if(b.type==='img'){ const f=document.createElement('figure'); const im=document.createElement('img'); im.src=b.url; im.width=b.w; im.height=b.h; im.alt=''; im.style.width=Math.max(55,b.pct)+'%'; f.appendChild(im); frag.appendChild(f); }
+    else { const el=document.createElement(b.type==='h'?'h3':'p'); el.innerHTML=markText(b.text); frag.appendChild(el); }
+  }
+  return frag;
+}
+function refreshFlowMarks(){ if(!R||R.mode!=='flow') return; for(const i of R.flowBuilt){ const b=R.flowCache.get(i+1); if(b) R.flowEls[i].replaceChildren(renderFlowBlocks(b,i+1)); } measure(); }
+
+/* ---- 읽던 곳 저장 ---- */
+function scheduleSave(){ if(!R) return; clearTimeout(R.saveT); R.saveT=setTimeout(saveProgress,500); }
+function saveProgress(){ if(!R) return; const b=R.book; b.lastPage=R.cur; b.lastFrac=currentFrac(); b.openedAt=Date.now(); dbPut('books',b).catch(()=>{}); }
+document.addEventListener('visibilitychange',()=>{ if(document.hidden&&R) saveProgress(); });
+window.addEventListener('pagehide',()=>{ if(R) saveProgress(); });
+
+function closeBook(){
+  if(!R) return; saveProgress(); clearTimeout(R.saveT);
+  for(const [i,t] of R.rendering){ try{ t.cancel(); }catch(e){} }
+  try{ R.doc.destroy(); }catch(e){}
+  for(const u of R.flowUrls){ try{ URL.revokeObjectURL(u); }catch(e){} }
+  R=null; pagesEl.replaceChildren(); $('#flow').replaceChildren(); closeSheet(); showReader(false); loadShelf();
+}
+$('#backBtn').addEventListener('click',closeBook);
+
+/* ---- 확대·축소 ---- */
+function zoomBy(f){ if(!R) return; R.fit=false; R.scale=Math.min(6,Math.max(0.25,R.scale*f)); applyScale(true); toast(`${Math.round(R.scale/fitScale()*100)}%`); }
+$('#zoomIn').addEventListener('click',()=>{ if(!R) return; if(R.mode==='flow') flowFontBy(2); else zoomBy(1.25); });
+$('#zoomOut').addEventListener('click',()=>{ if(!R) return; if(R.mode==='flow') flowFontBy(-2); else zoomBy(1/1.25); });
+$('#zoomFit').addEventListener('click',()=>{ if(!R) return; closeSheet(); if(R.mode!=='page') setMode('page'); R.fit=true; applyScale(true); toast('원본 보기를 화면 너비에 맞췄습니다'); });
+
+/* ---- 두드려서 띠 숨기기 ---- */
+let pd=null;
+scroller.addEventListener('pointerdown',e=>{ pd={x:e.clientX,y:e.clientY,t:Date.now()}; },{passive:true});
+scroller.addEventListener('pointerup',e=>{
+  if(!pd||!R) return; const dx=Math.abs(e.clientX-pd.x), dy=Math.abs(e.clientY-pd.y), dt=Date.now()-pd.t; pd=null;
+  if(dx>8||dy>8||dt>350) return;
+  if(!$('#sheet').hidden){ closeSheet(); return; }
+  if(settings.tap!==false) readerEl.classList.toggle('chrome-hidden');
+});
+
+/* ---- 아래 판 ---- */
+function openSheet(kind){
+  const titles={search:'글자 찾기',bm:'책갈피',jump:'쪽 이동',menu:'메뉴'};
+  $('#sheetTitle').textContent=titles[kind];
+  for(const k of ['Search','Bm','Jump','Menu']) $('#pane'+k).hidden=(k.toLowerCase()!==kind);
+  $('#sheet').hidden=false; readerEl.classList.remove('chrome-hidden');
+  if(kind==='search'){ setTimeout(()=>$('#searchInput').focus(),50); }
+  if(kind==='bm') renderBmList();
+  if(kind==='jump'){ const r=$('#jumpRange'); r.max=R.num; r.value=R.cur; $('#jumpInput').value=''; $('#jumpInput').placeholder=`쪽 번호 (1~${R.num})`; $('#jumpHint').textContent=`지금 ${R.cur}쪽`; setTimeout(()=>$('#jumpInput').focus(),50); }
+  if(kind==='menu') renderInfo();
+}
+function closeSheet(){ $('#sheet').hidden=true; }
+$('#sheetClose').addEventListener('click',closeSheet);
+$('#searchBtn').addEventListener('click',()=>openSheet('search'));
+$('#bmBtn').addEventListener('click',()=>openSheet('bm'));
+$('#pageBtn').addEventListener('click',()=>openSheet('jump'));
+$('#menuBtn').addEventListener('click',()=>openSheet('menu'));
+$('#jumpForm').addEventListener('submit',e=>{ e.preventDefault(); const v=parseInt($('#jumpInput').value,10); if(v>=1&&v<=R.num){ goTo(v,0); closeSheet(); } else toast(`1부터 ${R.num} 사이의 숫자를 넣어 주세요`); });
+$('#jumpRange').addEventListener('input',e=>{ $('#jumpHint').textContent=`${e.target.value}쪽으로`; });
+$('#jumpRange').addEventListener('change',e=>{ goTo(parseInt(e.target.value,10),0); });
+$('#nightToggle').addEventListener('change',e=>{ settings.night=e.target.checked; lsSet('night',settings.night); readerEl.classList.toggle('night',settings.night); });
+$('#tapToggle').addEventListener('change',e=>{ settings.tap=e.target.checked; lsSet('tapHide',settings.tap); });
+function renderInfo(){
+  const b=R.book; const pb=$('#prepareBtn');
+  if(b.prepared){ pb.querySelector('span').textContent='전체 미리 준비됨 ✓'; pb.disabled=true; }
+  else if(R.preparing){ pb.disabled=true; }
+  else { pb.querySelector('span').textContent='이 책 전체 미리 준비 (다음부터 바로 뜨게)'; pb.disabled=false; }
+  $('#bookInfo').innerHTML=`<dt>제목</dt><dd>${esc(b.title)}</dd><dt>파일</dt><dd>${esc(b.fileName||'')}</dd><dt>쪽수</dt><dd>${b.pages}쪽</dd><dt>크기</dt><dd>${fmtBytes(b.size||0)}</dd><dt>넣은 날</dt><dd>${fmtDate(b.addedAt)}</dd><dt>책갈피</dt><dd>${(b.bookmarks||[]).length}개</dd>`;
+}
+
+/* ---- 책갈피 ---- */
+function hasBm(p){ return (R.book.bookmarks||[]).some(x=>x.page===p); }
+function updateBmButton(){ if(!R) return; $('#bmBtn').classList.toggle('on',hasBm(R.cur)); }
+async function toggleBookmark(page){
+  if(!R) return; page=page||R.cur; const b=R.book; b.bookmarks=b.bookmarks||[];
+  const idx=b.bookmarks.findIndex(x=>x.page===page);
+  if(idx>=0){ b.bookmarks.splice(idx,1); toast(`${page}쪽 책갈피를 뺐습니다`); }
+  else { b.bookmarks.push({page,note:'',at:Date.now()}); b.bookmarks.sort((a,c)=>a.page-c.page); toast(`${page}쪽에 책갈피를 넣었습니다`); }
+  await dbPut('books',b).catch(()=>{}); updateBmButton(); if(!$('#paneBm').hidden&&!$('#sheet').hidden) renderBmList();
+}
+async function renderBmList(){
+  const list=$('#bmList'); const bms=R.book.bookmarks||[];
+  $('#bmCount').textContent=bms.length?`${bms.length}개`:'아직 책갈피가 없습니다';
+  $('#bmToggleHere').querySelector('span').textContent=hasBm(R.cur)?`${R.cur}쪽 책갈피 빼기`:`${R.cur}쪽에 책갈피 넣기`;
+  list.replaceChildren();
+  for(const bm of bms){
+    const row=document.createElement('div'); row.className='bmrow';
+    row.innerHTML=`<button class="item"><span class="pg">${bm.page}쪽</span><span class="tx"><span class="snip muted">…</span>${bm.note?`<span class="note">${esc(bm.note)}</span>`:''}</span></button>
+      <button class="mini" title="메모"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h4l10-10-4-4L4 16v4zM13 7l4 4"/></svg></button>
+      <button class="mini" title="빼기"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`;
+    const [go,note,rm]=row.querySelectorAll('button');
+    go.addEventListener('click',()=>{ goTo(bm.page,0); closeSheet(); });
+    rm.addEventListener('click',()=>toggleBookmark(bm.page));
+    note.addEventListener('click',()=>{
+      if(row.nextElementSibling&&row.nextElementSibling.classList.contains('noteedit')){ row.nextElementSibling.remove(); return; }
+      const ed=document.createElement('div'); ed.className='noteedit'; ed.innerHTML=`<input type="text" placeholder="메모" value="${esc(bm.note||'')}"><button class="btn small primary">저장</button>`;
+      const inp=ed.querySelector('input'); const save=async()=>{ bm.note=inp.value.trim(); await dbPut('books',R.book).catch(()=>{}); renderBmList(); };
+      ed.querySelector('button').addEventListener('click',save); inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); save(); } });
+      row.after(ed); inp.focus();
+    });
+    list.appendChild(row);
+    getPageText(bm.page).then(t=>{ const s=t.text.replace(/\s+/g,' ').trim().slice(0,60); const el=row.querySelector('.snip'); if(el) el.textContent=s||'(글자 없는 쪽)'; }).catch(()=>{});
+  }
+}
+$('#bmToggleHere').addEventListener('click',()=>toggleBookmark());
+
+/* ---- 글자 찾기 ---- */
+const normChar=ch=>ch.toLowerCase();
+async function getPageText(n){
+  let t=R.textCache.get(n); if(t) return t;
+  const page=await getPage(n); const tc=await page.getTextContent();
+  let text='', normArr=[], map=[], omap=[];
+  tc.items.forEach((it,j)=>{
+    if(it.str){ for(const ch of it.str){ text+=ch; if(!/\s/.test(ch)){ normArr.push(normChar(ch)); map.push(j); omap.push(text.length-1); } } }
+    if(it.hasEOL) text+='\n';
+  });
+  t={text,norm:normArr.join(''),map,omap,items:tc.items.map(it=>({transform:it.transform,width:it.width,height:it.height,str:it.str}))};
+  R.textCache.set(n,t); return t;
+}
+$('#searchForm').addEventListener('submit',e=>{ e.preventDefault(); runSearch($('#searchInput').value); });
+async function runSearch(q){
+  if(!R) return; const nq=(q||'').replace(/\s+/g,'').toLowerCase();
+  const out=$('#searchResults'), st=$('#searchStatus'); out.replaceChildren();
+  if(nq.length<1){ st.textContent='찾을 글자를 넣어 주세요'; return; }
+  const g=++R.searchGen; const gen=R.gen; R.query=q; R.hits=new Map();
+  for(const i of R.rendered) redrawHighlights(i);
+  let count=0, pagesWith=0; const results=[];
+  for(let p=1;p<=R.num;p++){
+    if(!R||R.gen!==gen||R.searchGen!==g) return;
+    let t; try{ t=await getPageText(p); }catch(e){ continue; }
+    let idx=0, first=true;
+    while((idx=t.norm.indexOf(nq,idx))!==-1){
+      let set=R.hits.get(p); if(!set){ set=new Set(); R.hits.set(p,set); }
+      for(let k=idx;k<idx+nq.length;k++) set.add(t.map[k]);
+      const o1=t.omap[idx], o2=t.omap[idx+nq.length-1]+1;
+      const before=t.text.slice(Math.max(0,o1-22),o1), hit=t.text.slice(o1,o2), after=t.text.slice(o2,o2+34);
+      results.push({page:p,before,hit,after}); count++; if(first){ pagesWith++; first=false; }
+      idx+=nq.length; if(count>=400) break;
+    }
+    if(R.hits.has(p)&&R.rendered.has(p-1)) redrawHighlights(p-1);
+    if(p%8===0||p===R.num){ st.textContent=`${p}/${R.num}쪽 살펴봄 · ${count}곳 (${pagesWith}쪽)`; renderResults(out,results); if(p%8===0) await new Promise(r=>setTimeout(r,0)); }
+    if(count>=400){ st.textContent=`너무 많아 400곳까지만 보여 줍니다 · ${p}쪽까지 살펴봄`; break; }
+  }
+  if(R&&R.searchGen===g){ renderResults(out,results); refreshFlowMarks(); if(!count) st.textContent=`「${q}」을(를) 찾지 못했습니다. 글자가 아닌 사진으로 된 PDF이면 찾기가 되지 않습니다.`; else if(count<400) st.textContent=`「${q}」 ${count}곳 (${pagesWith}쪽) · 노란 표시가 그 자리입니다`; }
+}
+function renderResults(out,results){
+  const have=out.children.length;
+  for(let k=have;k<results.length;k++){
+    const r=results[k]; const b=document.createElement('button'); b.className='item';
+    b.innerHTML=`<span class="pg">${r.page}쪽</span><span class="tx">${esc(r.before.replace(/\s+/g,' '))}<b>${esc(r.hit.replace(/\s+/g,' '))}</b>${esc(r.after.replace(/\s+/g,' '))}</span>`;
+    b.addEventListener('click',()=>{ goTo(r.page,0); closeSheet(); });
+    out.appendChild(b);
+  }
+}
+function redrawHighlights(i){ const el=R.els[i]; el.querySelectorAll('.hl').forEach(h=>h.remove()); if(R.hits.has(i+1)) drawHighlights(i); }
+function drawHighlights(i){
+  const t=R.textCache.get(i+1), set=R.hits.get(i+1); if(!t||!set) return;
+  const el=R.els[i];
+  // 쪽 좌표 → 화면 좌표 변환은 pdf.js 뷰포트로
+  getPage(i+1).then(page=>{
+    if(!R||R.els[i]!==el) return;
+    const v=page.getViewport({scale:R.scale});
+    const frag=document.createDocumentFragment();
+    for(const j of set){ const it=t.items[j]; if(!it) continue;
+      const tx=pdfjs.Util.transform(v.transform,it.transform);
+      const fh=Math.hypot(tx[2],tx[3])||10; const w=(it.width||0)*R.scale;
+      const d=document.createElement('div'); d.className='hl';
+      d.style.left=(tx[4]-1)+'px'; d.style.top=(tx[5]-fh*0.95)+'px'; d.style.width=Math.max(4,w+2)+'px'; d.style.height=(fh*1.15)+'px';
+      frag.appendChild(d);
+    }
+    el.appendChild(frag);
+  }).catch(()=>{});
+}
+
+/* ---- 키보드 ---- */
+document.addEventListener('keydown',e=>{
+  if(!R) return; const tag=(e.target.tagName||'').toLowerCase(); if(tag==='input'||tag==='textarea') { if(e.key==='Escape'){ closeSheet(); } return; }
+  if(e.key==='Escape'){ if(!$('#sheet').hidden) closeSheet(); else closeBook(); }
+  else if(e.key==='ArrowRight'){ goTo(R.cur+1,0); }
+  else if(e.key==='ArrowLeft'){ goTo(R.cur-1,0); }
+  else if(e.key==='/'){ e.preventDefault(); openSheet('search'); }
+  else if(e.key==='b'||e.key==='B'){ toggleBookmark(); }
+  else if(e.key==='+'||e.key==='='){ $('#zoomIn').click(); }
+  else if(e.key==='-'){ $('#zoomOut').click(); }
+  else if(e.key==='m'||e.key==='M'){ setMode(R.mode==='flow'?'page':'flow'); }
+});
+
+/* ---- 안드로이드 앱의 뒤로 가기 단추가 부른다: 처리했으면 true ---- */
+window.__back=function(){
+  if(!$('#libSheet').hidden){ closeCardMenus(); return true; }
+  if(R){ if(!$('#sheet').hidden){ closeSheet(); return true; } closeBook(); return true; }
+  return false;
+};
+
+/* ---- 시작 ---- */
+async function start(data){
+  document.body.classList.add('in-library');
+  await loadShelf();
+  if(data&&data.bookId&&books.some(b=>b.id===data.bookId)) openBook(data.bookId);
+}
+try{ window.claude?.hot?.snapshot?.(()=>({bookId:R?R.book.id:null})); }catch(e){}
+if(window.claude?.hot?.ready) window.claude.hot.ready(start); else start(window.claude?.hot?.data||{});
+})();
+</script>
+
+</body>
+</html>

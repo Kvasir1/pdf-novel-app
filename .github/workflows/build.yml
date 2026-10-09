@@ -1,0 +1,60 @@
+name: APK 조립
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: 서명 키 풀어 놓기 (Secrets 의 KEYSTORE_B64)
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then echo "::error::KEYSTORE_B64 비밀값이 없습니다 — 저장소 Settings → Secrets and variables → Actions 에 넣어 주세요"; exit 1; fi
+          echo "$KEYSTORE_B64" | tr -d '\n ' | base64 -d > app/release.keystore
+          ls -la app/release.keystore
+
+      - name: 조립
+        env:
+          KEYSTORE_PASS: pdfshelf
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: 이름 붙이기
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/release/app-release.apk "out/PDF-novel-shelf-v1.${{ github.run_number }}.apk"
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: out/*.apk
+
+      - name: Release 에 올리기
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.${{ github.run_number }}
+          name: PDF 소설 서재 v1.${{ github.run_number }}
+          body: |
+            폰에서 아래 APK 를 내려받아 설치하세요. 인터넷 없이 됩니다.
+            설치 때 「알 수 없는 앱 설치 허용」을 한 번 눌러야 합니다.
+          files: out/*.apk
