@@ -107,6 +107,16 @@ body.dragging #library{outline:3px dashed var(--accent);outline-offset:-6px;bord
 .fp figure{margin:1em auto;text-align:center;max-width:100%}
 .fp img{max-width:100%;height:auto;border-radius:6px;display:inline-block;vertical-align:middle}
 .fp mark{background:var(--hl);color:inherit;border-radius:2px;padding:0 1px}
+.fp code{font-family:"D2Coding","Nanum Gothic Coding",ui-monospace,Menlo,Consolas,monospace;font-size:.95em}
+/* 색 상자: 어두운 것은 상태창(줄 그대로), 밝은 것은 인용 상자 */
+.fp .box{--bx:#1e1e1e;--bd:transparent;margin:1em 0;padding:.75em .95em;border-radius:10px;background:var(--bx);overflow-wrap:anywhere;min-width:0}
+.fp .box.dark{color:#ececec;font-size:.88em;line-height:1.6;border:1px solid rgba(255,255,255,.08)}
+.fp .box.dark.mono{font-family:"D2Coding","Nanum Gothic Coding",ui-monospace,Menlo,Consolas,monospace}
+.fp .box.dark .bl{white-space:pre-wrap;min-height:1.2em}
+.fp .box.dark code{font-size:1em}
+.fp .box.light{border-left:5px solid var(--bd);border-radius:6px;padding:.6em .9em .6em 1em}
+.fp .box.light p:last-child,.fp .box.light h3:last-child{margin-bottom:0}
+#reader.night .fp .box.light{background:rgba(255,255,255,.07)}
 .fp .skel{color:var(--muted);font-size:.78em;text-align:center;padding:2.2em 0}
 .fp .skel .spin.small{width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:-3px;margin-right:8px}
 .menurow:disabled{opacity:.6;cursor:default}
@@ -453,7 +463,7 @@ async function openBook(id){
   R={book:b,doc,gen,num:doc.numPages,dims:Array.from({length:doc.numPages},()=>({w:v.width,h:v.height})),dimsKnown:new Set([1]),
      scale:1,fit:true,els:[],tops:[],heights:[],rendered:new Set(),rendering:new Map(),pageCache:new Map(),textCache:new Map(),
      hits:new Map(),query:'',cur:b.lastPage||1,saveT:0,searchGen:0,dimsDone:false,
-     mode:'page',flowEls:[],flowBuilt:new Set(),flowBuilding:new Map(),flowPending:new Map(),flowCache:new Map(),flowUrls:[],flowRegime:null,flowWant:[],flowPumping:false,preparing:false,prepareAll:false};
+     mode:'page',flowEls:[],flowBuilt:new Set(),flowBuilding:new Map(),flowPending:new Map(),flowCache:new Map(),flowUrls:[],flowRegime:null,flowWant:[],flowPumping:false,preparing:false,prepareAll:false,fontFlags:new Map()};
   b.openedAt=Date.now(); dbPut('books',b).catch(()=>{});
   buildPages(); buildFlowSkeleton(); applyFlowFont(false);
   setMode(settings.viewMode||(scroller.clientWidth<700?'flow':'page'), true);
@@ -626,16 +636,42 @@ function buildFlowPage(i){
   R.flowBuilding.set(i,p);
   return p;
 }
+const NOF={b:false,i:false,m:false};
+// 글꼴 이름 → 굵게·기울임·고정폭. 글꼴 정보는 그리기 명령(getOperatorList)을 한 번 읽은 뒤에야 풀린다
+function resolveFontFlags(page,t){
+  if(t.flagged) return; let ok=true;
+  for(const it of t.items){ if(!it.str||it.f) continue; const fn=it.fontName; let f=R.fontFlags.get(fn);
+    if(!f){ f={b:false,i:false,m:false}; let nm='';
+      try{ const fo=page.commonObjs.get(fn); nm=String((fo&&fo.name)||''); }catch(e){ ok=false; }
+      if(nm){ f.b=/bold|black|heavy|semibold|extrabold|\bW[6-9]\b/i.test(nm); f.i=/italic|oblique/i.test(nm); f.m=/mono|courier|consol|coding|menlo|code/i.test(nm); }
+      const st=t.styles[fn]; if(st&&st.fontFamily==='monospace') f.m=true;
+      if(nm||!ok) R.fontFlags.set(fn,f); }
+    it.f=f; }
+  if(ok) t.flagged=true;
+}
+const sameF=(a,b)=>a.b===b.b&&a.i===b.i&&a.m===b.m;
+function pushSeg(segs,txt,f){ const l=segs[segs.length-1]; if(l&&sameF(l,f)) l.t+=txt; else segs.push({t:txt,b:f.b,i:f.i,m:f.m}); }
 function pageLines(t){
   const its=[];
-  t.items.forEach((it,j)=>{ if(!it.str||!it.str.trim()) return; const tr=it.transform; const size=Math.hypot(tr[2],tr[3])||Math.hypot(tr[0],tr[1])||10; its.push({str:it.str,x:tr[4],y:tr[5],w:it.width||0,size,j}); });
+  t.items.forEach((it,j)=>{ if(!it.str) return; const tr=it.transform; const size=Math.hypot(tr[2],tr[3])||Math.hypot(tr[0],tr[1])||10;
+    const ws=!it.str.trim(); // PDF 가 찍어 둔 「빈칸」 글자 — 띄어쓰기의 확실한 표시
+    let f=it.f||NOF; if(!f.i&&Math.abs(tr[2])>Math.abs(tr[3])*0.08) f={...f,i:true}; // 글꼴을 비스듬히 기울인 가짜 기울임도 잡는다
+    if(f.m&&!/[\p{L}\p{N}]/u.test(it.str)) f={...f,m:false}; // 괄호·기호만 고정폭 글꼴로 찍힌 것은 고정폭 취급 안 함
+    its.push({str:it.str,x:tr[4],y:tr[5],w:it.width||0,size:ws?size*0.6:size,j,f,ws}); });
   its.sort((a,b)=>b.y-a.y);
   const lines=[];
   for(const it of its){ const L=lines[lines.length-1]; if(L&&Math.abs(it.y-L.y)<=Math.max(it.size,L.size)*0.45){ L.items.push(it); L.size=Math.max(L.size,it.size); } else lines.push({y:it.y,size:it.size,items:[it]}); }
   for(const L of lines){
-    L.items.sort((a,b)=>a.x-b.x); let text='', right=-Infinity, size=0, x=Infinity, prev=null;
-    for(const it of L.items){ if(prev){ const gap=it.x-(prev.x+prev.w); if(gap>prev.size*0.22&&!/\s$/.test(text)&&!/^\s/.test(it.str)) text+=' '; } text+=it.str; right=Math.max(right,it.x+it.w); size=Math.max(size,it.size); x=Math.min(x,it.x); prev=it; }
-    L.text=text.replace(/\s+/g,' ').trim(); L.right=right; L.size=size; L.x=x; L.len=L.text.length;
+    L.items.sort((a,b)=>a.x-b.x); let text='', right=-Infinity, size=0, x=Infinity, prev=null; const segs=[]; let mono=0;
+    for(const it of L.items){
+      if(it.ws){ if(text&&!/\s$/.test(text)){ text+=' '; pushSeg(segs,' ',prev?prev.f:it.f); } continue; }
+      if(prev){ const gap=it.x-(prev.x+prev.w); if(gap>prev.size*0.22&&!/\s$/.test(text)&&!/^\s/.test(it.str)){ text+=' '; pushSeg(segs,' ',prev.f); } }
+      text+=it.str; pushSeg(segs,it.str,it.f); if(it.f.m) mono+=it.str.length;
+      right=Math.max(right,it.x+it.w); size=Math.max(size,it.size); x=Math.min(x,it.x); prev=it;
+    }
+    for(const s of segs) s.t=s.t.replace(/\s+/g,' ');
+    if(segs.length){ segs[0].t=segs[0].t.replace(/^\s+/,''); segs[segs.length-1].t=segs[segs.length-1].t.replace(/\s+$/,''); }
+    L.text=text.replace(/\s+/g,' ').trim(); L.segs=segs.filter(s=>s.t); L.right=right; L.size=size; L.x=x; L.len=L.text.length; L.mono=mono>L.len*0.6;
   }
   return lines.filter(L=>L.text);
 }
@@ -654,20 +690,21 @@ async function detectRegime(){
   R.flowRegime=(total>=8&&amb/total>0.8)?'midword':'keepall';
   return R.flowRegime;
 }
-function joinLines(acc,a,b,regime,pr){
-  const lb=b.text; if(!acc) return lb; const ea=acc[acc.length-1], sb=lb[0];
-  if(ea==='-'&&/[A-Za-z]/.test(sb)) return acc.slice(0,-1)+lb;
-  if(isHangul(ea)&&isHangul(sb)){ if(regime==='midword'&&(pr-a.right)<a.size*0.9) return acc+lb; return acc+' '+lb; }
-  if(isHangul(sb)||isHangul(ea)) return acc+' '+lb;
-  if(isCJK(ea)||isCJK(sb)||/[　-〿＀-￯]/.test(ea)) return acc+lb;
-  return acc+' '+lb;
+// 두 줄을 이을 때 사이에 무엇을 넣나: 'hyphen'(끝의 - 를 떼고 붙임) · ''(그냥 붙임) · ' '(띄움)
+function joinSep(acc,a,b,regime,pr){
+  const lb=b.text; if(!acc) return ''; const ea=acc[acc.length-1], sb=lb[0];
+  if(ea==='-'&&/[A-Za-z]/.test(sb)) return 'hyphen';
+  if(isHangul(ea)&&isHangul(sb)){ if(regime==='midword'&&(pr-a.right)<a.size*0.9) return ''; return ' '; }
+  if(isHangul(sb)||isHangul(ea)) return ' ';
+  if(isCJK(ea)||isCJK(sb)||/[　-〿＀-￯]/.test(ea)) return '';
+  return ' ';
 }
-function buildParagraphs(lines,regime,vp){
-  const pr=pageRight(lines);
-  const gaps=[]; for(let k=1;k<lines.length;k++){ const g=lines[k-1].y-lines[k].y; if(g>0&&g<lines[k].size*3) gaps.push(g); }
-  gaps.sort((a,b)=>a-b); const pitch=gaps.length?gaps[Math.floor(gaps.length/2)]:0;
-  const sz=new Map(); for(const L of lines){ const k=Math.round(L.size*2)/2; sz.set(k,(sz.get(k)||0)+L.len); }
-  let body=0,best=-1; for(const [k,v] of sz) if(v>best){ best=v; body=k; }
+function appendLine(cur,L,sep){
+  if(sep==='hyphen'){ cur.text=cur.text.slice(0,-1); const l=cur.segs[cur.segs.length-1]; if(l) l.t=l.t.slice(0,-1); }
+  else if(sep===' '){ cur.text+=' '; const l=cur.segs[cur.segs.length-1]; if(l) l.t+=' '; }
+  cur.text+=L.text; for(const s of L.segs) pushSeg(cur.segs,s.t,s);
+}
+function parasFrom(lines,regime,vp,pr,pitch,body){
   const paras=[]; let cur=null;
   for(let k=0;k<lines.length;k++){
     const L=lines[k], prev=lines[k-1]; let brk=!cur;
@@ -676,30 +713,78 @@ function buildParagraphs(lines,regime,vp){
       else if(Math.abs(L.size-prev.size)>Math.max(L.size,prev.size)*0.14) brk=true;
       else if(L.x>cur.x+L.size*0.9) brk=true;
       else if(pr-prev.right>prev.size*2.2) brk=true; }
-    if(brk){ cur={type:'p',x:L.x,size:L.size,top:vp.convertToViewportPoint(L.x,L.y+L.size)[1],text:L.text,last:L}; paras.push(cur); }
-    else { cur.text=joinLines(cur.text,cur.last,L,regime,pr); cur.last=L; }
+    if(brk){ cur={type:'p',x:L.x,size:L.size,top:vp.convertToViewportPoint(L.x,L.y+L.size)[1],text:L.text,segs:L.segs.map(s=>({...s})),last:L}; paras.push(cur); }
+    else { appendLine(cur,L,joinSep(cur.text,cur.last,L,regime,pr)); cur.last=L; }
   }
   for(const p of paras){ if(p.size>body*1.18&&p.text.length<80) p.type='h'; delete p.last; }
   return paras;
 }
-async function pageImageRects(page){
-  const OPS=pdfjs.OPS, U=pdfjs.Util; const ops=await page.getOperatorList();
-  let ctm=[1,0,0,1,0,0]; const stack=[]; const rects=[];
-  for(let k=0;k<ops.fnArray.length;k++){ const fn=ops.fnArray[k], a=ops.argsArray[k];
-    if(fn===OPS.save) stack.push(ctm);
-    else if(fn===OPS.restore) ctm=stack.pop()||ctm;
-    else if(fn===OPS.transform) ctm=U.transform(ctm,a);
-    else if(fn===OPS.paintFormXObjectBegin){ stack.push(ctm); if(a&&a[0]) ctm=U.transform(ctm,a[0]); }
-    else if(fn===OPS.paintFormXObjectEnd) ctm=stack.pop()||ctm;
-    else if(fn===OPS.paintImageXObject||fn===OPS.paintInlineImageXObject||fn===OPS.paintImageMaskXObject){
-      const pts=[[0,0],[1,0],[0,1],[1,1]].map(p=>U.applyTransform(p,ctm)); const xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]);
-      const r={x1:Math.min(...xs),y1:Math.min(...ys),x2:Math.max(...xs),y2:Math.max(...ys)};
-      if(r.x2-r.x1<40||r.y2-r.y1<40) continue;
-      if(rects.some(q=>Math.abs(q.x1-r.x1)<2&&Math.abs(q.y1-r.y1)<2&&Math.abs(q.x2-r.x2)<2&&Math.abs(q.y2-r.y2)<2)) continue;
-      rects.push(r);
+const lum=rgb=>(0.2126*rgb[0]+0.7152*rgb[1]+0.0722*rgb[2])/255;
+function buildParagraphs(lines,regime,vp,boxes){
+  const pr=pageRight(lines);
+  const gaps=[]; for(let k=1;k<lines.length;k++){ const g=lines[k-1].y-lines[k].y; if(g>0&&g<lines[k].size*3) gaps.push(g); }
+  gaps.sort((a,b)=>a-b); const pitch=gaps.length?gaps[Math.floor(gaps.length/2)]:0;
+  const sz=new Map(); for(const L of lines){ const k=Math.round(L.size*2)/2; sz.set(k,(sz.get(k)||0)+L.len); }
+  let body=0,best=-1; for(const [k,v] of sz) if(v>best){ best=v; body=k; }
+  // 줄마다 어느 색 상자 안에 있는지 (가장 작은 상자)
+  boxes=boxes||[];
+  for(const L of lines){ L.box=-1; let bestA=Infinity;
+    boxes.forEach((bx,i)=>{ if(L.x>=bx.x1-2&&L.x<=bx.x2+2&&L.y>=bx.y1-2&&L.y<=bx.y2+2){ const A=(bx.x2-bx.x1)*(bx.y2-bx.y1); if(A<bestA){ bestA=A; L.box=i; } } }); }
+  // 같은 상자(또는 상자 밖)끼리 이어지는 줄 묶음으로 나눈다
+  const runs=[]; for(const L of lines){ const r=runs[runs.length-1]; if(r&&r.box===L.box) r.lines.push(L); else runs.push({box:L.box,lines:[L]}); }
+  const out=[];
+  for(const r of runs){
+    if(r.box<0){ out.push(...parasFrom(r.lines,regime,vp,pr,pitch,body)); continue; }
+    const bx=boxes[r.box]; const top=vp.convertToViewportPoint(bx.x1,bx.y2)[1];
+    if(lum(bx.rgb)<0.5){ // 어두운 상자 = 상태창: 줄을 그대로 둔다
+      out.push({type:'box',rgb:bx.rgb,top,mono:r.lines.filter(L=>L.mono).length>r.lines.length/2,lines:r.lines.map(L=>L.segs.map(s=>({...s}))),text:r.lines.map(L=>L.text).join('\n')});
+    } else { // 밝은 상자 = 인용 상자: 안의 글은 보통 문단처럼 잇는다
+      const inner=parasFrom(r.lines,regime,vp,pageRight(r.lines)||pr,pitch,body);
+      out.push({type:'quote',rgb:bx.rgb,border:bx.border||null,top,paras:inner,text:inner.map(p=>p.text).join('\n')});
     }
   }
-  return rects;
+  return out;
+}
+// 쪽의 그리기 명령을 훑어 그림 자리와 색칠된 네모(상태창·인용 상자 바탕)를 찾는다
+async function pageGraphics(page,vp1){
+  const OPS=pdfjs.OPS, U=pdfjs.Util; const ops=await page.getOperatorList();
+  let st={ctm:[1,0,0,1,0,0],fill:[0,0,0]}; const stack=[]; const imgs=[]; const fills=[]; let path=[];
+  const pageA=vp1.width*vp1.height;
+  const bbox=pts=>{ const xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]); return {x1:Math.min(...xs),y1:Math.min(...ys),x2:Math.max(...xs),y2:Math.max(...ys)}; };
+  for(let k=0;k<ops.fnArray.length;k++){ const fn=ops.fnArray[k], a=ops.argsArray[k];
+    if(fn===OPS.save) stack.push({ctm:st.ctm,fill:st.fill});
+    else if(fn===OPS.restore) st=stack.pop()||st;
+    else if(fn===OPS.transform) st={ctm:U.transform(st.ctm,a),fill:st.fill};
+    else if(fn===OPS.paintFormXObjectBegin){ stack.push({ctm:st.ctm,fill:st.fill}); if(a&&a[0]) st={ctm:U.transform(st.ctm,a[0]),fill:st.fill}; }
+    else if(fn===OPS.paintFormXObjectEnd) st=stack.pop()||st;
+    else if(fn===OPS.setFillRGBColor){ st={ctm:st.ctm,fill:[a[0],a[1],a[2]]}; }
+    else if(fn===OPS.constructPath){
+      const pops=a[0], pargs=a[1]; let i=0; const pts=[];
+      for(const op of pops){
+        if(op===OPS.rectangle){ const x=pargs[i],y=pargs[i+1],w=pargs[i+2],h=pargs[i+3]; i+=4; pts.push([x,y],[x+w,y+h]); }
+        else if(op===OPS.moveTo||op===OPS.lineTo){ pts.push([pargs[i],pargs[i+1]]); i+=2; }
+        else if(op===OPS.curveTo){ pts.push([pargs[i+4],pargs[i+5]]); i+=6; }
+        else if(op===OPS.curveTo2||op===OPS.curveTo3){ pts.push([pargs[i+2],pargs[i+3]]); i+=4; }
+      }
+      if(pts.length) path.push(bbox(pts.map(p=>U.applyTransform(p,st.ctm))));
+    }
+    else if(fn===OPS.fill||fn===OPS.eoFill||fn===OPS.fillStroke||fn===OPS.eoFillStroke||fn===OPS.closeFillStroke||fn===OPS.closeEOFillStroke){
+      for(const r of path){ const w=r.x2-r.x1, h=r.y2-r.y1; if(w<1.2||h<1.2) continue; if(w*h>pageA*0.85) continue; fills.push({...r,rgb:st.fill}); }
+      path=[];
+    }
+    else if(fn===OPS.stroke||fn===OPS.closeStroke||fn===OPS.endPath) path=[];
+    else if(fn===OPS.paintImageXObject||fn===OPS.paintInlineImageXObject||fn===OPS.paintImageMaskXObject){
+      const r=bbox([[0,0],[1,0],[0,1],[1,1]].map(p=>U.applyTransform(p,st.ctm)));
+      if(r.x2-r.x1<40||r.y2-r.y1<40) continue;
+      if(imgs.some(q=>Math.abs(q.x1-r.x1)<2&&Math.abs(q.y1-r.y1)<2&&Math.abs(q.x2-r.x2)<2&&Math.abs(q.y2-r.y2)<2)) continue;
+      imgs.push(r);
+    }
+  }
+  // 색 상자: 흰색에 가깝지 않고, 글이 들어갈 만한 크기. 가늘고 긴 것은 테두리 띠 후보
+  const boxes=[], bars=[];
+  for(const f of fills){ const w=f.x2-f.x1, h=f.y2-f.y1; if(lum(f.rgb)>0.96) continue; if(w<=8&&h>=10) bars.push(f); else if(w>=30&&h>=10) boxes.push(f); }
+  for(const bx of boxes){ const b=bars.find(bar=>Math.abs(bar.x1-bx.x1)<10&&bar.y1<bx.y2&&bar.y2>bx.y1&&(Math.min(bar.y2,bx.y2)-Math.max(bar.y1,bx.y1))>(bx.y2-bx.y1)*0.5); if(b) bx.border=b.rgb; }
+  return {imgs,boxes};
 }
 async function cropImages(page,rects,vp1){
   // 화면에 보일 크기만큼만 그린다 — 폰에서는 작게 그려야 빠르다
@@ -724,14 +809,16 @@ function withUrls(blocks){ for(const b of blocks){ if(b.type==='img'&&!b.url&&b.
 async function getFlowBlocks(n){
   let b=R.flowCache.get(n); if(b) return b;
   if(R.flowPending.has(n)) return R.flowPending.get(n);
-  const gen=R.gen, key=R.book.id+':'+n;
+  const gen=R.gen, key=R.book.id+':2:'+n;   // ':2:' = 꾸밈(상자·굵게)까지 저장하는 둘째 판
   const p=(async()=>{
     // 미리 준비해 둔 것이 있으면 그걸 쓴다
     try{ const saved=await dbGet('flow',key); if(saved&&saved.blocks){ if(!R||R.gen!==gen) return saved.blocks; const bb=withUrls(saved.blocks); R.flowCache.set(n,bb); return bb; } }catch(e){}
     const page=await getPage(n); const t=await getPageText(n); const regime=await detectRegime();
     const vp1=page.getViewport({scale:1});
-    const paras=buildParagraphs(pageLines(t),regime,vp1);
-    let imgs=[]; try{ const rects=await pageImageRects(page); if(rects.length) imgs=await cropImages(page,rects,vp1); }catch(e){ console.warn('images',n,e); }
+    let gfx={imgs:[],boxes:[]}; try{ gfx=await pageGraphics(page,vp1); }catch(e){ console.warn('graphics',n,e); }
+    try{ resolveFontFlags(page,t); }catch(e){}
+    const paras=buildParagraphs(pageLines(t),regime,vp1,gfx.boxes);
+    let imgs=[]; try{ if(gfx.imgs.length) imgs=await cropImages(page,gfx.imgs,vp1); }catch(e){ console.warn('images',n,e); }
     const blocks=[...paras,...imgs].sort((p,q)=>p.top-q.top);
     if(!R||R.gen!==gen) return blocks;
     R.flowCache.set(n,withUrls(blocks));
@@ -750,7 +837,7 @@ async function prepareWholeBook(){
     for(let n=1;n<=R.num;n++){
       if(!R||R.gen!==gen) return;
       if(!R.flowCache.has(n)){ await getFlowBlocks(n); }
-      else if(!(await dbGet('flow',b.id+':'+n).catch(()=>null))){ const blocks=R.flowCache.get(n); await dbPut('flow',{key:b.id+':'+n,blocks:blocks.map(x=>x.type==='img'?{type:'img',blob:x.blob,w:x.w,h:x.h,top:x.top,pct:x.pct}:x)}).catch(()=>{}); }
+      else if(!(await dbGet('flow',b.id+':2:'+n).catch(()=>null))){ const blocks=R.flowCache.get(n); await dbPut('flow',{key:b.id+':2:'+n,blocks:blocks.map(x=>x.type==='img'?{type:'img',blob:x.blob,w:x.w,h:x.h,top:x.top,pct:x.pct}:x)}).catch(()=>{}); }
       if(n%5===0||n===R.num){ lbl.textContent=`미리 준비 중… ${n}/${R.num}쪽`; }
       // 읽고 있는 쪽이 먼저다: 화면에 필요한 쪽이 기다리면 잠깐 양보
       await new Promise(r=>setTimeout(r,0));
@@ -766,13 +853,21 @@ function markText(text){
   const re=new RegExp(nq.split('').map(ch=>ch.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\s*'),'gi');
   return safe.replace(re,m=>`<mark>${m}</mark>`);
 }
+function segsHTML(segs,text){
+  if(!segs||!segs.length) return markText(text||'');
+  return segs.map(s=>{ let h=markText(s.t); if(s.m) h=`<code>${h}</code>`; if(s.b) h=`<b>${h}</b>`; if(s.i) h=`<i>${h}</i>`; return h; }).join('');
+}
+const rgbCss=c=>`rgb(${c[0]},${c[1]},${c[2]})`;
+function renderPara(b){ const el=document.createElement(b.type==='h'?'h3':'p'); el.innerHTML=segsHTML(b.segs,b.text); return el; }
 function renderFlowBlocks(blocks,pageNo){
   const frag=document.createDocumentFragment();
   const m=document.createElement('div'); m.className='pmark'; m.textContent=`${pageNo}쪽`; frag.appendChild(m);
   if(!blocks.length){ const d=document.createElement('div'); d.className='noText'; d.textContent='이 쪽에서는 뽑아낼 글이나 그림이 없습니다 — 원본 보기로 확인하세요'; frag.appendChild(d); return frag; }
   for(const b of blocks){
     if(b.type==='img'){ const f=document.createElement('figure'); const im=document.createElement('img'); im.src=b.url; im.width=b.w; im.height=b.h; im.alt=''; im.style.width=Math.max(55,b.pct)+'%'; f.appendChild(im); frag.appendChild(f); }
-    else { const el=document.createElement(b.type==='h'?'h3':'p'); el.innerHTML=markText(b.text); frag.appendChild(el); }
+    else if(b.type==='box'){ const d=document.createElement('div'); d.className='box dark'+(b.mono?' mono':''); d.style.setProperty('--bx',rgbCss(b.rgb)); d.innerHTML=(b.lines||[]).map(segs=>`<div class="bl">${segsHTML(segs)||'&nbsp;'}</div>`).join(''); frag.appendChild(d); }
+    else if(b.type==='quote'){ const q=document.createElement('blockquote'); q.className='box light'; q.style.setProperty('--bx',rgbCss(b.rgb)); if(b.border) q.style.setProperty('--bd',rgbCss(b.border)); for(const p of (b.paras||[])) q.appendChild(renderPara(p)); frag.appendChild(q); }
+    else frag.appendChild(renderPara(b));
   }
   return frag;
 }
@@ -885,7 +980,7 @@ async function getPageText(n){
     if(it.str){ for(const ch of it.str){ text+=ch; if(!/\s/.test(ch)){ normArr.push(normChar(ch)); map.push(j); omap.push(text.length-1); } } }
     if(it.hasEOL) text+='\n';
   });
-  t={text,norm:normArr.join(''),map,omap,items:tc.items.map(it=>({transform:it.transform,width:it.width,height:it.height,str:it.str}))};
+  t={text,norm:normArr.join(''),map,omap,items:tc.items.map(it=>({transform:it.transform,width:it.width,height:it.height,str:it.str,fontName:it.fontName})),styles:tc.styles||{}};
   R.textCache.set(n,t); return t;
 }
 $('#searchForm').addEventListener('submit',e=>{ e.preventDefault(); runSearch($('#searchInput').value); });
