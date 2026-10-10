@@ -480,7 +480,11 @@ async function openBook(id){
      scale:1,fit:true,els:[],tops:[],heights:[],rendered:new Set(),rendering:new Map(),pageCache:new Map(),textCache:new Map(),
      hits:new Map(),query:'',cur:b.lastPage||1,saveT:0,searchGen:0,dimsDone:false,
      mode:'page',flowEls:[],flowBuilt:new Set(),flowBuilding:new Map(),flowPending:new Map(),flowCache:new Map(),flowUrls:[],flowRegime:null,flowWant:[],flowPumping:false,preparing:false,prepareAll:false,fontFlags:new Map()};
-  b.openedAt=Date.now(); dbPut('books',b).catch(()=>{});
+  b.openedAt=Date.now();
+  if(b.flowVer!==FLOW_VER){ // 글자 보기 규칙이 바뀌었으면 옛 규칙으로 준비해 둔 쪽은 버리고 새로 만든다
+    for(let v=1;v<FLOW_VER;v++) dbDelPrefix('flow',b.id+':'+v+':').catch(()=>{});
+    b.flowVer=FLOW_VER; b.prepared=false; }
+  dbPut('books',b).catch(()=>{});
   buildPages(); buildFlowSkeleton(); applyFlowFont(false);
   setMode(settings.viewMode||(scroller.clientWidth<700?'flow':'page'), true);
   if(R.fit) R.scale=fitScale(); sizePages(); measure();
@@ -879,10 +883,12 @@ async function cropImages(page,rects,vp1,cv){
   return out;
 }
 function withUrls(blocks){ for(const b of blocks){ if(b.type==='img'&&!b.url&&b.blob){ b.url=URL.createObjectURL(b.blob); R.flowUrls.push(b.url); } } return blocks; }
+const FLOW_VER=3; // 글자 보기 규칙의 판 번호 — 규칙을 고치면 올린다 (1: 글만 · 2: 상자·굵게 · 3: 크랙 문단·이름·글머리표)
+const flowKey=(id,n)=>id+':'+FLOW_VER+':'+n;
 async function getFlowBlocks(n){
   let b=R.flowCache.get(n); if(b) return b;
   if(R.flowPending.has(n)) return R.flowPending.get(n);
-  const gen=R.gen, key=R.book.id+':2:'+n;   // ':2:' = 꾸밈(상자·굵게)까지 저장하는 둘째 판
+  const gen=R.gen, key=flowKey(R.book.id,n);
   const p=(async()=>{
     // 미리 준비해 둔 것이 있으면 그걸 쓴다
     try{ const saved=await dbGet('flow',key); if(saved&&saved.blocks){ if(!R||R.gen!==gen) return saved.blocks; const bb=withUrls(saved.blocks); R.flowCache.set(n,bb); return bb; } }catch(e){}
@@ -912,7 +918,7 @@ async function prepareWholeBook(){
     for(let n=1;n<=R.num;n++){
       if(!R||R.gen!==gen) return;
       if(!R.flowCache.has(n)){ await getFlowBlocks(n); }
-      else if(!(await dbGet('flow',b.id+':2:'+n).catch(()=>null))){ const blocks=R.flowCache.get(n); await dbPut('flow',{key:b.id+':2:'+n,blocks:blocks.map(x=>x.type==='img'?{type:'img',blob:x.blob,w:x.w,h:x.h,top:x.top,pct:x.pct}:x)}).catch(()=>{}); }
+      else if(!(await dbGet('flow',flowKey(b.id,n)).catch(()=>null))){ const blocks=R.flowCache.get(n); await dbPut('flow',{key:flowKey(b.id,n),blocks:blocks.map(x=>x.type==='img'?{type:'img',blob:x.blob,w:x.w,h:x.h,top:x.top,pct:x.pct}:x)}).catch(()=>{}); }
       if(n%5===0||n===R.num){ lbl.textContent=`미리 준비 중… ${n}/${R.num}쪽`; }
       // 읽고 있는 쪽이 먼저다: 화면에 필요한 쪽이 기다리면 잠깐 양보
       await new Promise(r=>setTimeout(r,0));
