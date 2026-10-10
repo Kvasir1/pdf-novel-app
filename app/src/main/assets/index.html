@@ -204,11 +204,18 @@ body.dragging #library{outline:3px dashed var(--accent);outline-offset:-6px;bord
 /* 알림 띠 */
 .toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;z-index:99;max-width:min(92vw,520px);text-align:center;box-shadow:var(--shadow)}
 body.in-library .toast{bottom:28px}
+.syncbar{position:absolute;left:12px;right:12px;bottom:calc(72px + env(safe-area-inset-bottom,0px));z-index:4;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:var(--surface);color:var(--fg);border:1px solid var(--line);box-shadow:var(--shadow);font-size:15px;line-height:1.4}
+.syncbar span{flex:1}
+.syncbar .btn{min-height:40px;font-size:15px}
+#reader.chrome-hidden .syncbar{bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+.syncline{display:inline-flex;align-items:center;gap:6px}
+.syncline .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.syncline.on .dot{background:#2a9d4a}
 </style>
 
 <div id="library">
   <header class="lib-head">
-    <h1>PDF 소설 서재<small>PDF를 넣어 두고 원본 그대로 읽습니다 · 읽던 곳, 책갈피는 이 기기 안에 남습니다</small></h1>
+    <h1>PDF 소설 서재<small id="libSub">PDF를 넣어 두고 원본 그대로 읽습니다 · 읽던 곳, 책갈피는 이 기기 안에 남습니다</small></h1>
     <div class="lib-actions">
       <label class="btn primary" for="fileInput" tabindex="0">
         <svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>PDF 넣기
@@ -247,6 +254,8 @@ body.in-library .toast{bottom:28px}
     </div>
   </footer>
 
+  <div id="syncBar" class="syncbar" hidden><span id="syncMsg"></span><button id="syncGo" class="btn small primary">이동</button><button id="syncNo" class="btn small" title="닫기">닫기</button></div>
+
   <div id="sheet" class="sheet" hidden>
     <div class="sh"><h2 id="sheetTitle"></h2><button id="sheetClose" class="x" title="닫기"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div class="sb">
@@ -282,6 +291,7 @@ body.in-library .toast{bottom:28px}
         <div class="seg" data-set="pad"><span class="lbl">여백</span><button data-v="10">좁게</button><button data-v="18">보통</button><button data-v="28">넓게</button></div>
         <p class="hint">글꼴·줄 간격·여백은 글자 보기에만 적용됩니다. 「명조」는 폰에 명조 글꼴이 없으면 고딕으로 보입니다.</p>
         <p class="hint">「글자」 보기는 PDF에서 글과 그림을 뽑아 화면 너비에 맞춰 다시 흐르게 합니다 — 글씨를 키워도 잘리지 않습니다. 「원본」 보기는 PDF 모양 그대로입니다.</p>
+        <p class="hint" id="syncHint"></p>
         <div class="info"><dl id="bookInfo"></dl></div>
       </div>
     </div>
@@ -396,7 +406,7 @@ function openCardMenu(card,b){
     if(a==='open'){ closeCardMenus(); openBook(b.id); }
     else if(a==='rename'){ view('rename'); const inp=$('#renameInput'); inp.focus(); inp.select(); inp.addEventListener('keydown',ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); body.querySelector('[data-a="rename-ok"]').click(); } }); }
     else if(a==='rename-ok'){ const v=$('#renameInput').value.trim(); if(v){ b.title=v; await dbPut('books',b).catch(()=>{}); } closeCardMenus(); renderShelf(); }
-    else if(a==='reset'){ b.lastPage=1; b.lastFrac=0; await dbPut('books',b).catch(()=>{}); closeCardMenus(); renderShelf(); toast('읽은 곳을 처음으로 되돌렸습니다'); }
+    else if(a==='reset'){ b.lastPage=1; b.lastFrac=0; b.posAt=Date.now(); await dbPut('books',b).catch(()=>{}); syncSchedule(b,true); closeCardMenus(); renderShelf(); toast('읽은 곳을 처음으로 되돌렸습니다'); }
     else if(a==='del'){ view('del'); }
     else if(a==='del-ok'){ try{ await dbDel('files',b.id); await dbDel('books',b.id); await dbDelPrefix('flow',b.id+':'); }catch(err){ toast('지우지 못했습니다: '+(err.message||err)); } closeCardMenus(); await loadShelf(); toast('지웠습니다'); }
     else if(a==='back'){ view('main'); }
@@ -425,7 +435,7 @@ async function importFiles(list){
   for(const f of files){ n++; toast(`넣는 중… ${n}/${files.length} · ${f.name}`,true);
     try{ await importOne(f); ok++; }catch(e){ console.error(e); toast(`「${f.name}」을(를) 넣지 못했습니다: ${e.message||e}`); await new Promise(r=>setTimeout(r,1800)); }
   }
-  hideToast(); await loadShelf();
+  hideToast(); await loadShelf(); syncShelf(); // 다른 기기에서 이미 읽던 책이면 읽던 곳을 받아 온다
   if(ok) toast(ok===1?'서재에 넣었습니다':`${ok}권을 서재에 넣었습니다`);
 }
 async function importOne(f){
@@ -488,10 +498,16 @@ async function openBook(id){
   buildPages(); buildFlowSkeleton(); applyFlowFont(false);
   setMode(settings.viewMode||(scroller.clientWidth<700?'flow':'page'), true);
   if(R.fit) R.scale=fitScale(); sizePages(); measure();
+  // 다른 기기에서 더 멀리 읽었으면 그 자리로 (4초 안에 답이 없으면 일단 이 기기의 자리로 열고, 늦게 오면 「이동」을 권한다)
+  let late=null;
+  if(S.on){ setStatus('읽던 곳 맞추는 중…'); const pull=syncPull(b).catch(()=>null); const res=await Promise.race([pull,new Promise(r=>setTimeout(()=>r('late'),4000))]);
+    if(!R||R.gen!==gen) return; if(res==='late') late=pull; }
   setStatus(null);
   goTo(Math.min(Math.max(1,b.lastPage||1),R.num), b.lastFrac||0, true);
   updateBmButton();
   loadDimsProgressively();
+  if(late) late.then(out=>{ if(out&&out.moved&&R&&R.book===b&&b.lastPage!==R.cur) syncOffer(b.lastPage,b.lastFrac); });
+  syncOpened(b);
 }
 function setMode(mode, initial){
   if(!R) return; const prev=initial?null:{page:R.cur,frac:currentFrac()};
@@ -967,12 +983,14 @@ function refreshFlowMarks(){ if(!R||R.mode!=='flow') return; for(const i of R.fl
 
 /* ---- 읽던 곳 저장 ---- */
 function scheduleSave(){ if(!R) return; clearTimeout(R.saveT); R.saveT=setTimeout(saveProgress,500); }
-function saveProgress(){ if(!R) return; const b=R.book; b.lastPage=R.cur; b.lastFrac=currentFrac(); b.openedAt=Date.now(); dbPut('books',b).catch(()=>{}); }
-document.addEventListener('visibilitychange',()=>{ if(document.hidden&&R) saveProgress(); });
-window.addEventListener('pagehide',()=>{ if(R) saveProgress(); });
+function saveProgress(){ if(!R) return; const b=R.book; const np=R.cur, nf=currentFrac();
+  if(np!==(b.lastPage||1)||Math.abs(nf-(b.lastFrac||0))>0.002){ b.posAt=Date.now(); syncSchedule(b,false); } // 자리가 바뀐 때만 「언제」를 적는다 — 기기끼리 더 나중 것을 고르는 기준
+  b.lastPage=np; b.lastFrac=nf; b.openedAt=Date.now(); dbPut('books',b).catch(()=>{}); }
+document.addEventListener('visibilitychange',()=>{ if(document.hidden&&R){ saveProgress(); if(S.dirty) syncPush(); } });
+window.addEventListener('pagehide',()=>{ if(R){ saveProgress(); if(S.dirty) syncPush(); } });
 
 function closeBook(){
-  if(!R) return; saveProgress(); clearTimeout(R.saveT);
+  if(!R) return; saveProgress(); clearTimeout(R.saveT); syncClosed();
   for(const [i,t] of R.rendering){ try{ t.cancel(); }catch(e){} }
   try{ R.doc.destroy(); }catch(e){}
   for(const u of R.flowUrls){ try{ URL.revokeObjectURL(u); }catch(e){} }
@@ -1032,9 +1050,9 @@ function updateBmButton(){ if(!R) return; $('#bmBtn').classList.toggle('on',hasB
 async function toggleBookmark(page){
   if(!R) return; page=page||R.cur; const b=R.book; b.bookmarks=b.bookmarks||[];
   const idx=b.bookmarks.findIndex(x=>x.page===page);
-  if(idx>=0){ b.bookmarks.splice(idx,1); toast(`${page}쪽 책갈피를 뺐습니다`); }
+  if(idx>=0){ b.bookmarks.splice(idx,1); b.removed=(b.removed||[]).filter(t=>t.page!==page); b.removed.push({page,at:Date.now()}); toast(`${page}쪽 책갈피를 뺐습니다`); } // 뺀 기록 — 다른 기기에서 되살아나지 않게
   else { b.bookmarks.push({page,note:'',at:Date.now()}); b.bookmarks.sort((a,c)=>a.page-c.page); toast(`${page}쪽에 책갈피를 넣었습니다`); }
-  await dbPut('books',b).catch(()=>{}); updateBmButton(); if(!$('#paneBm').hidden&&!$('#sheet').hidden) renderBmList();
+  await dbPut('books',b).catch(()=>{}); updateBmButton(); if(!$('#paneBm').hidden&&!$('#sheet').hidden) renderBmList(); syncSchedule(b,true);
 }
 async function renderBmList(){
   const list=$('#bmList'); const bms=R.book.bookmarks||[];
@@ -1052,7 +1070,7 @@ async function renderBmList(){
     note.addEventListener('click',()=>{
       if(row.nextElementSibling&&row.nextElementSibling.classList.contains('noteedit')){ row.nextElementSibling.remove(); return; }
       const ed=document.createElement('div'); ed.className='noteedit'; ed.innerHTML=`<input type="text" placeholder="메모" value="${esc(bm.note||'')}"><button class="btn small primary">저장</button>`;
-      const inp=ed.querySelector('input'); const save=async()=>{ bm.note=inp.value.trim(); await dbPut('books',R.book).catch(()=>{}); renderBmList(); };
+      const inp=ed.querySelector('input'); const save=async()=>{ bm.note=inp.value.trim(); bm.at=Date.now(); await dbPut('books',R.book).catch(()=>{}); renderBmList(); syncSchedule(R.book,true); };
       ed.querySelector('button').addEventListener('click',save); inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); save(); } });
       row.after(ed); inp.focus();
     });
@@ -1150,10 +1168,98 @@ window.__back=function(){
   return false;
 };
 
+/* ---- 읽던 곳 맞추기 ----
+   claude.ai 게시판 판에서만 돈다: 게시판 페이지가 쓸 수 있는 「함께 쓰는 저장소」에 책마다 읽던 쪽·책갈피를 올려 두고,
+   같은 계정으로 이 링크를 연 다른 기기가 받아 간다. 책은 PDF 앞부분(256KB)+크기의 지문(syncKey)으로 알아본다.
+   앱(APK)·파일 판에는 window.claude 가 없어 아무 일도 하지 않는다. */
+const S={on:false,db:null,uid:null,dev:(()=>{ let d=lsGet('devId',null); if(!d){ d=newId(); lsSet('devId',d); } return d; })(),remote:new Map(),unsub:null,pushT:0,pushing:false,dirty:null,last:0,offer:null};
+async function syncKeyFor(b){
+  if(b.syncKey) return b.syncKey;
+  try{ const f=await dbGet('files',b.id); if(!f||!f.data||!crypto.subtle) return null;
+    const h=await crypto.subtle.digest('SHA-256',new Uint8Array(f.data.slice(0,262144)));
+    b.syncKey='k'+[...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,'0')).join('').slice(0,24)+'-'+f.data.byteLength;
+    await dbPut('books',b).catch(()=>{}); return b.syncKey; }catch(e){ return null; }
+}
+const syncDoc=key=>S.db.doc('data/users/'+S.uid+'/'+key);
+const hasProgress=b=>(b.lastPage||1)>1||(b.lastFrac||0)>0.001;
+function ensurePosAt(b){ if(b.posAt==null) b.posAt=hasProgress(b)?(b.openedAt||b.addedAt||1):0; }
+function bookState(b){ return {title:b.title,fileName:b.fileName||'',pages:b.pages||0,lastPage:b.lastPage||1,lastFrac:b.lastFrac||0,posAt:b.posAt||0,
+  bookmarks:(b.bookmarks||[]).map(x=>({page:x.page,note:x.note||'',at:x.at||0})),removed:(b.removed||[]).slice(-200),updatedAt:Date.now(),dev:S.dev}; }
+// 이쪽(loc)과 저쪽(rem)을 합친다: 읽던 자리는 더 나중 것 · 책갈피는 합집합(같은 쪽이면 더 나중 메모) · 뺀 기록이 책갈피보다 나중이면 빠진 것으로
+function mergeState(loc,rem){
+  ensurePosAt(loc); const out={changedLocal:false,changedRemote:false,moved:false};
+  const lp=loc.posAt||0, rp=rem.posAt||0;
+  if(rp>lp){ if((rem.lastPage||1)!==(loc.lastPage||1)||Math.abs((rem.lastFrac||0)-(loc.lastFrac||0))>0.002) out.moved=true; loc.lastPage=rem.lastPage||1; loc.lastFrac=rem.lastFrac||0; loc.posAt=rp; out.changedLocal=true; }
+  else if(lp>rp) out.changedRemote=true;
+  const tomb=new Map(); for(const t of [...(loc.removed||[]),...(rem.removed||[])]) if(t&&t.page&&(!tomb.has(t.page)||tomb.get(t.page)<t.at)) tomb.set(t.page,t.at||0);
+  const bm=new Map(); for(const x of [...(loc.bookmarks||[]),...(rem.bookmarks||[])]){ if(!x||!x.page) continue; const c=bm.get(x.page); if(!c||(x.at||0)>(c.at||0)) bm.set(x.page,{page:x.page,note:x.note||'',at:x.at||0}); }
+  const merged=[...bm.values()].filter(x=>!(tomb.has(x.page)&&tomb.get(x.page)>(x.at||0))).sort((a,b)=>a.page-b.page);
+  const sig=a=>JSON.stringify((a||[]).map(x=>[x.page,x.note||'',x.at||0]));
+  if(sig(merged)!==sig(loc.bookmarks)){ loc.bookmarks=merged; out.changedLocal=true; }
+  if(sig(merged)!==sig(rem.bookmarks)) out.changedRemote=true;
+  loc.removed=[...tomb].map(([page,at])=>({page,at})).filter(t=>Date.now()-t.at<90*864e5);
+  return out;
+}
+function syncApply(b,rem,key){
+  ensurePosAt(b);
+  if(!rem){ if(hasProgress(b)||(b.bookmarks||[]).length) syncSchedule(b,true); return {moved:false,changedLocal:false}; }
+  const out=mergeState(b,rem);
+  if(out.changedLocal) dbPut('books',b).catch(()=>{});
+  if(out.changedRemote) syncSchedule(b,true);
+  S.remote.set(key,rem); return out;
+}
+async function syncPull(b){ if(!S.on) return null; const key=await syncKeyFor(b); if(!key) return null;
+  let snap; try{ snap=await syncDoc(key).get(); }catch(e){ console.warn('sync pull',e); return null; }
+  return syncApply(b,snap.exists?snap.data():null,key); }
+function syncSchedule(b,now){ if(!S.on||!b) return; S.dirty=b; clearTimeout(S.pushT); if(now) syncPush(); else S.pushT=setTimeout(syncPush,2500); }
+async function syncPush(){ if(!S.on||!S.dirty||S.pushing) return; const b=S.dirty; S.dirty=null; S.pushing=true;
+  try{ const key=await syncKeyFor(b); if(key){ const st=bookState(b); await syncDoc(key).set(st); S.remote.set(key,st); S.last=Date.now(); syncLine(); } }
+  catch(e){ console.warn('sync push',e); }
+  finally{ S.pushing=false; if(S.dirty) syncSchedule(S.dirty,false); } }
+async function syncShelf(){ if(!S.on) return; let all; try{ all=await S.db.collection('data/users/'+S.uid).get(); }catch(e){ console.warn('sync shelf',e); return; }
+  const map=new Map(all.docs.map(d=>[d.id,d.data()])); let changed=false;
+  for(const b of books){ const key=await syncKeyFor(b); if(!key) continue; const out=syncApply(b,map.get(key)||null,key); if(out&&out.changedLocal) changed=true; }
+  S.last=Date.now(); if(changed&&!R) renderShelf(); syncLine(); }
+function syncOffer(page,frac){ if(!R) return; S.offer={page,frac}; $('#syncMsg').textContent=`다른 기기에서 ${page}쪽까지 읽었습니다`; $('#syncBar').hidden=false; }
+$('#syncGo').addEventListener('click',()=>{ const o=S.offer; $('#syncBar').hidden=true; S.offer=null; if(o&&R) goTo(Math.min(o.page,R.num),o.frac||0); });
+$('#syncNo').addEventListener('click',()=>{ $('#syncBar').hidden=true; S.offer=null; });
+async function syncOpened(b){ if(!S.on) return; if(S.unsub){ S.unsub(); S.unsub=null; }
+  const key=await syncKeyFor(b); if(!key||!R||R.book!==b) return;
+  S.unsub=syncDoc(key).onSnapshot(snap=>{
+    if(!R||R.book!==b||snap.metadata.hasPendingWrites) return;
+    const rem=snap.exists?snap.data():null; if(!rem||rem.dev===S.dev) return;
+    const out=mergeState(b,rem); S.remote.set(key,rem);
+    if(out.changedLocal){ dbPut('books',b).catch(()=>{}); updateBmButton(); if(!$('#paneBm').hidden&&!$('#sheet').hidden) renderBmList(); }
+    if(out.changedRemote) syncSchedule(b,false);
+    if(out.moved&&b.lastPage!==R.cur) syncOffer(b.lastPage,b.lastFrac);
+  },e=>console.warn('sync sub',e));
+}
+function syncClosed(){ if(S.unsub){ S.unsub(); S.unsub=null; } $('#syncBar').hidden=true; S.offer=null; if(S.dirty) syncPush(); }
+function syncLine(){
+  const t=S.last?new Date(S.last).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}):'';
+  const sub=$('#libSub'), hint=$('#syncHint');
+  if(S.on){ sub.innerHTML=`PDF를 넣어 두고 원본 그대로 읽습니다 · <span class="syncline on"><i class="dot"></i>같은 계정으로 이 링크를 연 다른 기기와 읽던 곳·책갈피를 맞춥니다${t?` (마지막 ${t})`:''}</span>`;
+    hint.textContent=`읽던 곳 맞추기: 켜짐 — 같은 claude.ai 계정으로 이 링크를 연 폰·컴퓨터와 읽던 쪽·책갈피를 맞춥니다. PDF 파일 자체는 기기마다 따로 넣어야 합니다.${t?` 마지막 맞춤 ${t}.`:''}`; }
+  else if(S.tried){ sub.textContent='PDF를 넣어 두고 원본 그대로 읽습니다 · 읽던 곳, 책갈피는 이 기기 안에 남습니다';
+    hint.textContent=window.claude&&typeof window.claude.use==='function'?'읽던 곳 맞추기: 꺼짐 — claude.ai 에 로그인한 상태로 이 링크를 열면 켜집니다.':'읽던 곳 맞추기: 이 판(앱·파일로 여는 판)에서는 안 됩니다 — claude.ai 링크로 열면 같은 계정의 다른 기기와 맞춰집니다.'; }
+}
+async function syncInit(){
+  S.tried=true;
+  if(!window.claude||typeof window.claude.use!=='function'){ syncLine(); return; }
+  try{ const [db,user]=await Promise.all([window.claude.use('db'),window.claude.use('user')]);
+    if(!db||!user){ syncLine(); return; } const uid=await user.id(); if(!uid){ syncLine(); return; }
+    S.db=db; S.uid=uid; S.on=true; }
+  catch(e){ console.warn('sync init',e); syncLine(); return; }
+  syncLine(); await syncShelf();
+  if(R){ const b=R.book; const out=await syncPull(b); if(R&&R.book===b){ if(out&&out.moved&&b.lastPage!==R.cur) syncOffer(b.lastPage,b.lastFrac); syncOpened(b); } }
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&!R&&S.on&&Date.now()-S.last>15000) syncShelf(); });
+}
+
 /* ---- 시작 ---- */
 async function start(data){
   document.body.classList.add('in-library');
   await loadShelf();
+  syncInit(); // 게시판 판이면 읽던 곳 맞추기를 켠다 (서재는 기다리지 않고 먼저 보인다)
   if(data&&data.bookId&&books.some(b=>b.id===data.bookId)) openBook(data.bookId);
 }
 try{ window.claude?.hot?.snapshot?.(()=>({bookId:R?R.book.id:null})); }catch(e){}
