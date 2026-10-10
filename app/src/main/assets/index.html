@@ -94,7 +94,17 @@ body.dragging #library{outline:3px dashed var(--accent);outline-offset:-6px;bord
 #reader.night .page .hl{mix-blend-mode:screen}
 
 /* 글자 보기 — 글과 그림을 화면 너비에 맞춰 다시 흐르게 */
-.flow{display:none;max-width:42em;margin:0 auto;padding:calc(60px + env(safe-area-inset-top,0px)) 18px calc(80px + env(safe-area-inset-bottom,0px));font-size:var(--flow-size,19px);line-height:1.75;color:var(--fg);overflow-wrap:anywhere;word-break:keep-all;min-width:0}
+.flow{display:none;max-width:42em;margin:0 auto;padding:calc(60px + env(safe-area-inset-top,0px)) var(--flow-pad,18px) calc(80px + env(safe-area-inset-bottom,0px));font-size:var(--flow-size,19px);line-height:var(--flow-lh,1.75);color:var(--fg);overflow-wrap:anywhere;word-break:keep-all;min-width:0}
+.flow.serif{font-family:"Noto Serif KR","Noto Serif CJK KR","KoPubWorld Batang","KoPub Batang","Nanum Myeongjo","NanumMyeongjo","Apple Myungjo","Batang",Georgia,serif}
+.flow.heavy{color:#000}
+.flow.heavy p,.flow.heavy h3,.flow.heavy blockquote,.flow.heavy .box{-webkit-text-stroke:.28px currentColor}
+#reader.night .flow.heavy{color:#fff}
+.fp .c{color:var(--c)}
+#reader.night .fp .c{color:color-mix(in srgb,var(--c) 62%,#fff)}
+.seg{display:flex;align-items:center;gap:6px;padding:10px 0;border-bottom:1px solid var(--line)}
+.seg .lbl{flex:0 0 5em;font-size:17px}
+.seg button{flex:1;min-height:48px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:16px}
+.seg button.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
 #reader.flowmode{background:var(--surface)}
 #reader.flowmode .pages{display:none}
 #reader.flowmode .flow{display:block}
@@ -266,6 +276,11 @@ body.in-library .toast{bottom:28px}
         <button id="zoomFit" class="menurow"><svg class="ico" viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/></svg><span>원본 보기를 화면 너비에 맞춤</span></button>
         <label class="toggle"><span>밤 모드 <span class="muted">원본 보기에서는 색 반전이라 그림 색이 뒤집혀 보입니다</span></span><input id="nightToggle" type="checkbox"></label>
         <label class="toggle"><span>화면을 두드리면 위아래 띠 숨기기</span><input id="tapToggle" type="checkbox" checked></label>
+        <label class="toggle"><span>글씨 진하게 <span class="muted">글자 보기의 본문을 더 또렷하고 검게</span></span><input id="heavyToggle" type="checkbox" checked></label>
+        <div class="seg" data-set="face"><span class="lbl">글꼴</span><button data-v="sans">고딕</button><button data-v="serif">명조</button></div>
+        <div class="seg" data-set="lh"><span class="lbl">줄 간격</span><button data-v="1.55">좁게</button><button data-v="1.75">보통</button><button data-v="1.95">넓게</button></div>
+        <div class="seg" data-set="pad"><span class="lbl">여백</span><button data-v="10">좁게</button><button data-v="18">보통</button><button data-v="28">넓게</button></div>
+        <p class="hint">글꼴·줄 간격·여백은 글자 보기에만 적용됩니다. 「명조」는 폰에 명조 글꼴이 없으면 고딕으로 보입니다.</p>
         <p class="hint">「글자」 보기는 PDF에서 글과 그림을 뽑아 화면 너비에 맞춰 다시 흐르게 합니다 — 글씨를 키워도 잘리지 않습니다. 「원본」 보기는 PDF 모양 그대로입니다.</p>
         <div class="info"><dl id="bookInfo"></dl></div>
       </div>
@@ -441,7 +456,8 @@ document.addEventListener('drop',e=>{ if(R) return; e.preventDefault(); dragDept
 let R=null;             // 지금 열린 책의 상태
 const scroller=$('#scroller'), pagesEl=$('#pages'), readerEl=$('#reader');
 const GAP=10, MAX_FIT_WIDTH=1000, MAX_PIXELS=16e6;
-const settings={ night:lsGet('night',false), tap:lsGet('tapHide',true), flowFont:lsGet('flowFont',19), viewMode:lsGet('viewMode',null) };
+const settings={ night:lsGet('night',false), tap:lsGet('tapHide',true), flowFont:lsGet('flowFont',19), viewMode:lsGet('viewMode',null),
+  face:lsGet('flowFace','sans'), lh:lsGet('flowLh','1.75'), pad:lsGet('flowPad','18'), heavy:lsGet('flowHeavy',true) };
 readerEl.classList.toggle('night',!!settings.night);
 $('#nightToggle').checked=!!settings.night; $('#tapToggle').checked=settings.tap!==false;
 
@@ -603,9 +619,14 @@ function buildFlowSkeleton(){
 }
 function applyFlowFont(keep){
   const prev=keep&&R&&R.mode==='flow'?{page:R.cur,frac:currentFrac()}:null;
-  $('#flow').style.setProperty('--flow-size',settings.flowFont+'px');
+  const fl=$('#flow'); fl.style.setProperty('--flow-size',settings.flowFont+'px'); fl.style.setProperty('--flow-lh',settings.lh); fl.style.setProperty('--flow-pad',settings.pad+'px');
+  fl.classList.toggle('serif',settings.face==='serif'); fl.classList.toggle('heavy',settings.heavy!==false);
+  document.querySelectorAll('#paneMenu .seg').forEach(g=>{ const k=g.dataset.set; g.querySelectorAll('button').forEach(b=>b.classList.toggle('on',String(settings[k])===b.dataset.v)); });
+  $('#heavyToggle').checked=settings.heavy!==false;
   if(prev){ measure(); goTo(prev.page,prev.frac,true); }
 }
+document.querySelectorAll('#paneMenu .seg').forEach(g=>g.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const k=g.dataset.set; settings[k]=b.dataset.v; lsSet({face:'flowFace',lh:'flowLh',pad:'flowPad'}[k],settings[k]); applyFlowFont(true); }));
+$('#heavyToggle').addEventListener('change',e=>{ settings.heavy=e.target.checked; lsSet('flowHeavy',settings.heavy); applyFlowFont(true); });
 function flowFontBy(d){ settings.flowFont=Math.min(36,Math.max(13,settings.flowFont+d)); lsSet('flowFont',settings.flowFont); applyFlowFont(true); toast(`글자 크기 ${settings.flowFont}`); }
 const skelHTML=(n,busy)=>`<div class="skel">${busy?'<span class="spin small"></span>':''}${n}쪽 ${busy?'준비 중…':'(아직 준비 전)'}</div>`;
 function unbuildFlowPage(i){ const sec=R.flowEls[i]; sec.style.minHeight=sec.offsetHeight+'px'; sec.innerHTML=skelHTML(i+1,false); R.flowBuilt.delete(i); }
@@ -649,14 +670,16 @@ function resolveFontFlags(page,t){
     it.f=f; }
   if(ok) t.flagged=true;
 }
-const sameF=(a,b)=>a.b===b.b&&a.i===b.i&&a.m===b.m;
-function pushSeg(segs,txt,f){ const l=segs[segs.length-1]; if(l&&sameF(l,f)) l.t+=txt; else segs.push({t:txt,b:f.b,i:f.i,m:f.m}); }
+const hexD=(a,b)=>{ if(a===b) return 0; if(!a||!b) return 999; let d=0; for(let i=1;i<7;i+=2) d+=Math.abs(parseInt(a.slice(i,i+2),16)-parseInt(b.slice(i,i+2),16)); return d; };
+const sameF=(a,b)=>a.b===b.b&&a.i===b.i&&a.m===b.m&&hexD(a.c||'',b.c||'')<=56; // 글자마다 잰 색이 조금씩 달라도 같은 색으로 본다
+function pushSeg(segs,txt,f){ const l=segs[segs.length-1]; if(l&&(sameF(l,f)||!txt.trim())) l.t+=txt; else segs.push({t:txt,b:f.b,i:f.i,m:f.m,c:f.c||''}); }
 function pageLines(t){
   const its=[];
   t.items.forEach((it,j)=>{ if(!it.str) return; const tr=it.transform; const size=Math.hypot(tr[2],tr[3])||Math.hypot(tr[0],tr[1])||10;
     const ws=!it.str.trim(); // PDF 가 찍어 둔 「빈칸」 글자 — 띄어쓰기의 확실한 표시
     let f=it.f||NOF; if(!f.i&&Math.abs(tr[2])>Math.abs(tr[3])*0.08) f={...f,i:true}; // 글꼴을 비스듬히 기울인 가짜 기울임도 잡는다
     if(f.m&&!/[\p{L}\p{N}]/u.test(it.str)) f={...f,m:false}; // 괄호·기호만 고정폭 글꼴로 찍힌 것은 고정폭 취급 안 함
+    if(it.c) f={...f,c:it.c}; else if(f.c) f={...f,c:''};
     its.push({str:it.str,x:tr[4],y:tr[5],w:it.width||0,size:ws?size*0.6:size,j,f,ws}); });
   its.sort((a,b)=>b.y-a.y);
   const lines=[];
@@ -786,12 +809,45 @@ async function pageGraphics(page,vp1){
   for(const bx of boxes){ const b=bars.find(bar=>Math.abs(bar.x1-bx.x1)<10&&bar.y1<bx.y2&&bar.y2>bx.y1&&(Math.min(bar.y2,bx.y2)-Math.max(bar.y1,bx.y1))>(bx.y2-bx.y1)*0.5); if(b) bx.border=b.rgb; }
   return {imgs,boxes};
 }
-async function cropImages(page,rects,vp1){
-  // 화면에 보일 크기만큼만 그린다 — 폰에서는 작게 그려야 빠르다
-  const want=Math.min(1400, Math.max(600, scroller.clientWidth*Math.min(window.devicePixelRatio||1,2)));
+// 쪽을 한 번 그린다 — 그림 오려내기와 글자 색 재기에 같이 쓴다
+async function renderPageCanvas(page,vp1,wantImgs){
+  // 화면에 보일 크기만큼만 그린다 — 폰에서는 작게 그려야 빠르다. 글자 색만 잴 때는 더 작게
+  const want=wantImgs?Math.min(1400, Math.max(600, scroller.clientWidth*Math.min(window.devicePixelRatio||1,2))):700;
   const s=Math.min(2.5,Math.max(0.8,want/vp1.width)); const vp=page.getViewport({scale:s});
   const c=document.createElement('canvas'); c.width=Math.ceil(vp.width); c.height=Math.ceil(vp.height);
   await page.render({canvasContext:c.getContext('2d',{alpha:false}),viewport:vp}).promise;
+  return {c,vp,s};
+}
+// 글자 자리의 색을 재서 「색 있는 글자」를 알아낸다 — 엔진이 글자 색을 안 알려 주므로 그린 그림에서 잰다
+function sampleTextColors(cv,t){
+  const {c,vp,s}=cv; let img; try{ img=c.getContext('2d').getImageData(0,0,c.width,c.height); }catch(e){ return; }
+  const d=img.data, W=c.width, H=c.height;
+  const px=(x,y)=>{ const i=((y*W)+x)*4; return [d[i],d[i+1],d[i+2]]; };
+  const dist=(a,b)=>Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1])+Math.abs(a[2]-b[2]);
+  const sat=c=>{ const mx=Math.max(c[0],c[1],c[2]), mn=Math.min(c[0],c[1],c[2]); return mx? (mx-mn)/mx : 0; };
+  for(const it of t.items){
+    if(!it.str||!it.str.trim()) continue; const tr=it.transform; const size=Math.hypot(tr[2],tr[3])||10;
+    const r=vp.convertToViewportRectangle([tr[4],tr[5]-size*0.22,tr[4]+(it.width||size*0.6),tr[5]+size*0.78]);
+    let x1=Math.max(0,Math.floor(Math.min(r[0],r[2]))), x2=Math.min(W-1,Math.ceil(Math.max(r[0],r[2]))), y1=Math.max(0,Math.floor(Math.min(r[1],r[3]))), y2=Math.min(H-1,Math.ceil(Math.max(r[1],r[3])));
+    if(x2-x1<2||y2-y1<2) continue;
+    // 바탕색: 네 귀퉁이 바깥쪽
+    const bg=px(Math.max(0,x1-1),Math.max(0,y1-1));
+    let best=null, bestD=0, acc=[0,0,0], n=0;
+    const stepX=Math.max(1,Math.floor((x2-x1)/14)), stepY=Math.max(1,Math.floor((y2-y1)/10));
+    for(let y=y1;y<=y2;y+=stepY) for(let x=x1;x<=x2;x+=stepX){ const p=px(x,y); const dd=dist(p,bg); if(dd>bestD){ bestD=dd; best=p; } }
+    if(!best||bestD<90) continue; // 잉크를 못 찾음(빈칸이거나 바탕과 비슷)
+    // 가장 진한 잉크와 비슷한 점들의 평균 = 글자 색 (번진 가장자리는 뺀다)
+    for(let y=y1;y<=y2;y+=stepY) for(let x=x1;x<=x2;x+=stepX){ const p=px(x,y); if(dist(p,best)<60){ acc[0]+=p[0]; acc[1]+=p[1]; acc[2]+=p[2]; n++; } }
+    if(!n) continue; const col=[Math.round(acc[0]/n),Math.round(acc[1]/n),Math.round(acc[2]/n)];
+    const l=lum(col), sa=sat(col);
+    // 검정·짙은 회색·흰색·옅은 회색은 「기본 색」으로 본다 — 색이 뚜렷한 것만 남긴다
+    if(sa<0.28&&(l<0.32||l>0.78)) continue;
+    if(sa<0.12) continue;
+    it.c='#'+col.map(v=>Math.round(v/8)*8).map(v=>Math.min(255,v).toString(16).padStart(2,'0')).join('');
+  }
+}
+async function cropImages(page,rects,vp1,cv){
+  const {c,vp,s}=cv;
   const out=[];
   for(const r of rects){
     const v=vp.convertToViewportRectangle([r.x1,r.y1,r.x2,r.y2]);
@@ -802,7 +858,6 @@ async function cropImages(page,rects,vp1){
     const blob=await new Promise(res=>cc.toBlob(res,'image/jpeg',0.86)); if(!blob) continue;
     out.push({type:'img',blob,w:cc.width,h:cc.height,top:Math.min(v[1],v[3])/s,pct:Math.min(100,Math.round((r.x2-r.x1)/vp1.width*100))});
   }
-  c.width=0; c.height=0;
   return out;
 }
 function withUrls(blocks){ for(const b of blocks){ if(b.type==='img'&&!b.url&&b.blob){ b.url=URL.createObjectURL(b.blob); R.flowUrls.push(b.url); } } return blocks; }
@@ -817,8 +872,10 @@ async function getFlowBlocks(n){
     const vp1=page.getViewport({scale:1});
     let gfx={imgs:[],boxes:[]}; try{ gfx=await pageGraphics(page,vp1); }catch(e){ console.warn('graphics',n,e); }
     try{ resolveFontFlags(page,t); }catch(e){}
+    let cv=null; try{ cv=await renderPageCanvas(page,vp1,gfx.imgs.length>0); sampleTextColors(cv,t); }catch(e){ console.warn('render',n,e); }
     const paras=buildParagraphs(pageLines(t),regime,vp1,gfx.boxes);
-    let imgs=[]; try{ if(gfx.imgs.length) imgs=await cropImages(page,gfx.imgs,vp1); }catch(e){ console.warn('images',n,e); }
+    let imgs=[]; try{ if(gfx.imgs.length&&cv) imgs=await cropImages(page,gfx.imgs,vp1,cv); }catch(e){ console.warn('images',n,e); }
+    if(cv){ cv.c.width=0; cv.c.height=0; }
     const blocks=[...paras,...imgs].sort((p,q)=>p.top-q.top);
     if(!R||R.gen!==gen) return blocks;
     R.flowCache.set(n,withUrls(blocks));
@@ -855,10 +912,21 @@ function markText(text){
 }
 function segsHTML(segs,text){
   if(!segs||!segs.length) return markText(text||'');
-  return segs.map(s=>{ let h=markText(s.t); if(s.m) h=`<code>${h}</code>`; if(s.b) h=`<b>${h}</b>`; if(s.i) h=`<i>${h}</i>`; return h; }).join('');
+  return segs.map(s=>{ let h=markText(s.t); if(s.m) h=`<code>${h}</code>`; if(s.b) h=`<b>${h}</b>`; if(s.i) h=`<i>${h}</i>`; if(s.c&&/^#[0-9a-f]{6}$/i.test(s.c)){ const m=/^([\s\S]*?)(\s*)$/.exec(h); h=`<span class="c" style="--c:${s.c}">${m[1]}</span>${m[2]}`; } return h; }).join('');
 }
 const rgbCss=c=>`rgb(${c[0]},${c[1]},${c[2]})`;
-function renderPara(b){ const el=document.createElement(b.type==='h'?'h3':'p'); el.innerHTML=segsHTML(b.segs,b.text); return el; }
+// 「이름 | 대사」 꼴이면 앞의 이름을 굵게 — 크랙 로그의 말하는 사람 표시
+const NAME_RE=/^([^\p{L}\p{N}\s]{0,3}\s?)([\p{L}\p{N}·\s]{1,14}?)\s*[|｜](?=\s|$)/u;
+function boldName(segs,text){
+  const m=NAME_RE.exec(text||''); if(!m) return segs; const L=m[1].length+m[2].length; if(L<1) return segs;
+  const out=[]; let pos=0;
+  for(const s of segs){ const st=pos, en=pos+s.t.length; pos=en;
+    if(en<=L){ out.push({...s,b:true}); }
+    else if(st>=L){ out.push(s); }
+    else { out.push({...s,t:s.t.slice(0,L-st),b:true}); out.push({...s,t:s.t.slice(L-st)}); } }
+  return out;
+}
+function renderPara(b){ const el=document.createElement(b.type==='h'?'h3':'p'); const segs=(b.segs&&b.segs.length)?boldName(b.segs,b.text):b.segs; el.innerHTML=segsHTML(segs,b.text); return el; }
 function renderFlowBlocks(blocks,pageNo){
   const frag=document.createDocumentFragment();
   const m=document.createElement('div'); m.className='pmark'; m.textContent=`${pageNo}쪽`; frag.appendChild(m);
