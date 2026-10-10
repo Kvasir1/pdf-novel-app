@@ -675,11 +675,13 @@ const sameF=(a,b)=>a.b===b.b&&a.i===b.i&&a.m===b.m&&hexD(a.c||'',b.c||'')<=56; /
 function pushSeg(segs,txt,f){ const l=segs[segs.length-1]; if(l&&(sameF(l,f)||!txt.trim())) l.t+=txt; else segs.push({t:txt,b:f.b,i:f.i,m:f.m,c:f.c||''}); }
 function pageLines(t){
   const its=[];
-  t.items.forEach((it,j)=>{ if(!it.str) return; const tr=it.transform; const size=Math.hypot(tr[2],tr[3])||Math.hypot(tr[0],tr[1])||10;
+  const marks=[]; // 길이 0 글자 항목 = 크롬이 찍은 PDF 에서 문단이 새로 시작하는 자리
+  t.items.forEach((it,j)=>{ const tr=it.transform; const size=Math.hypot(tr[2],tr[3])||Math.hypot(tr[0],tr[1])||10;
+    if(it.str===''){ marks.push({y:tr[5],size}); return; } if(!it.str) return;
     const ws=!it.str.trim(); // PDF 가 찍어 둔 「빈칸」 글자 — 띄어쓰기의 확실한 표시
     let f=it.f||NOF; if(!f.i&&Math.abs(tr[2])>Math.abs(tr[3])*0.08) f={...f,i:true}; // 글꼴을 비스듬히 기울인 가짜 기울임도 잡는다
     if(f.m&&!/[\p{L}\p{N}]/u.test(it.str)) f={...f,m:false}; // 괄호·기호만 고정폭 글꼴로 찍힌 것은 고정폭 취급 안 함
-    if(it.c) f={...f,c:it.c}; else if(f.c) f={...f,c:''};
+    if(it.c&&/[\p{L}\p{N}]/u.test(it.str)) f={...f,c:it.c}; else if(f.c) f={...f,c:''}; // 그림 글자(이모지)·기호만인 것은 색 안 칠함
     its.push({str:it.str,x:tr[4],y:tr[5],w:it.width||0,size:ws?size*0.6:size,j,f,ws}); });
   its.sort((a,b)=>b.y-a.y);
   const lines=[];
@@ -696,20 +698,26 @@ function pageLines(t){
     if(segs.length){ segs[0].t=segs[0].t.replace(/^\s+/,''); segs[segs.length-1].t=segs[segs.length-1].t.replace(/\s+$/,''); }
     L.text=text.replace(/\s+/g,' ').trim(); L.segs=segs.filter(s=>s.t); L.right=right; L.size=size; L.x=x; L.len=L.text.length; L.mono=mono>L.len*0.6;
   }
-  return lines.filter(L=>L.text);
+  const out=lines.filter(L=>L.text);
+  for(const m of marks){ const L=out.find(L=>Math.abs(L.y-m.y)<=Math.max(L.size,m.size)*0.45); if(L) L.blockStart=true; }
+  out.hasMarks=marks.length>0;
+  return out;
 }
 function pageRight(lines){ let r=0; for(const L of lines) if(L.len>=15) r=Math.max(r,L.right); if(!r) for(const L of lines) r=Math.max(r,L.right); return r; }
 async function detectRegime(){
   // 이 PDF가 한글 낱말 중간에서 줄을 끊는지(midword) 낱말 단위로 끊는지(keepall) 앞쪽 몇 쪽으로 가늠한다
   if(R.flowRegime) return R.flowRegime;
-  let amb=0,total=0;
+  let amb=0,total=0, nl=0, ml=0;
   for(let n=1;n<=Math.min(R.num,12);n++){
     let t; try{ t=await getPageText(n); }catch(e){ continue; }
     const lines=pageLines(t), pr=pageRight(lines);
+    nl+=lines.length; ml+=lines.filter(L=>L.blockStart).length;
     for(let k=0;k<lines.length-1;k++){ const a=lines[k], b=lines[k+1]; const gap=a.y-b.y; if(gap<=0||gap>a.size*2) continue;
       const ea=a.text[a.text.length-1], sb=b.text[0]; if(!isHangul(ea)||!isHangul(sb)) continue; if(pr-a.right>a.size*3) continue;
       total++; if(pr-a.right<a.size*0.9) amb++; }
   }
+  // 시작 표시가 거의 모든 줄에 붙어 있으면(크롬 인쇄 PDF) 문단 표시로서는 쓸모가 없다 → 'line'. 문단 첫 줄에만 붙으면(크랙 PDF) 'para'
+  R.flowMarkMode=(nl>=10&&ml/nl>0.7)?'line':'para';
   R.flowRegime=(total>=8&&amb/total>0.8)?'midword':'keepall';
   return R.flowRegime;
 }
@@ -732,18 +740,22 @@ function parasFrom(lines,regime,vp,pr,pitch,body){
   for(let k=0;k<lines.length;k++){
     const L=lines[k], prev=lines[k-1]; let brk=!cur;
     if(!brk){ const gap=prev.y-L.y;
-      if(gap>pitch*1.45+0.5) brk=true;
+      if(L.blockStart) brk=true;                       // 크롬 PDF 의 문단 시작 표시
+      else if(NAME_RE.test(L.text)) brk=true;          // 「이름 |」 로 시작하는 말 줄은 새 문단
+      else if(gap>pitch*1.45+0.5) brk=true;
       else if(Math.abs(L.size-prev.size)>Math.max(L.size,prev.size)*0.14) brk=true;
       else if(L.x>cur.x+L.size*0.9) brk=true;
-      else if(pr-prev.right>prev.size*2.2) brk=true; }
+      else if(!lines.hasMarks&&pr-prev.right>prev.size*2.2) brk=true; } // 시작 표시가 없는 PDF 에서만 「짧은 줄 = 문단 끝」
     if(brk){ cur={type:'p',x:L.x,size:L.size,top:vp.convertToViewportPoint(L.x,L.y+L.size)[1],text:L.text,segs:L.segs.map(s=>({...s})),last:L}; paras.push(cur); }
     else { appendLine(cur,L,joinSep(cur.text,cur.last,L,regime,pr)); cur.last=L; }
   }
   for(const p of paras){ if(p.size>body*1.18&&p.text.length<80) p.type='h'; delete p.last; }
-  return paras;
+  return paras.filter(p=>!/^\d{1,4}\s*\/\s*\d{1,4}$/.test(p.text.trim())); // 「3 / 162」 쪽 번호 줄은 뺀다
 }
 const lum=rgb=>(0.2126*rgb[0]+0.7152*rgb[1]+0.0722*rgb[2])/255;
-function buildParagraphs(lines,regime,vp,boxes){
+function buildParagraphs(lines,regime,vp,boxes,dots){
+  if(R.flowMarkMode==='line'){ for(const L of lines) L.blockStart=false; lines.hasMarks=false; } // 줄마다 붙는 표시는 무시하고 「짧은 줄 = 문단 끝」 규칙으로
+  for(const d of (dots||[])){ const cy=(d.y1+d.y2)/2; const L=lines.find(L=>L.x>d.x2&&L.x-d.x2<L.size*1.6&&Math.abs(L.y+L.size*0.35-cy)<L.size*0.7); if(L&&!L.bullet){ L.bullet=true; L.text='• '+L.text; if(L.segs.length) L.segs[0]={...L.segs[0],t:'• '+L.segs[0].t}; else L.segs=[{t:'• ',b:false,i:false,m:false,c:''}]; L.blockStart=true; } }
   const pr=pageRight(lines);
   const gaps=[]; for(let k=1;k<lines.length;k++){ const g=lines[k-1].y-lines[k].y; if(g>0&&g<lines[k].size*3) gaps.push(g); }
   gaps.sort((a,b)=>a-b); const pitch=gaps.length?gaps[Math.floor(gaps.length/2)]:0;
@@ -757,6 +769,7 @@ function buildParagraphs(lines,regime,vp,boxes){
   const runs=[]; for(const L of lines){ const r=runs[runs.length-1]; if(r&&r.box===L.box) r.lines.push(L); else runs.push({box:L.box,lines:[L]}); }
   const out=[];
   for(const r of runs){
+    r.lines.hasMarks=lines.hasMarks;
     if(r.box<0){ out.push(...parasFrom(r.lines,regime,vp,pr,pitch,body)); continue; }
     const bx=boxes[r.box]; const top=vp.convertToViewportPoint(bx.x1,bx.y2)[1];
     if(lum(bx.rgb)<0.5){ // 어두운 상자 = 상태창: 줄을 그대로 둔다
@@ -804,10 +817,15 @@ async function pageGraphics(page,vp1){
     }
   }
   // 색 상자: 흰색에 가깝지 않고, 글이 들어갈 만한 크기. 가늘고 긴 것은 테두리 띠 후보
-  const boxes=[], bars=[];
-  for(const f of fills){ const w=f.x2-f.x1, h=f.y2-f.y1; if(lum(f.rgb)>0.96) continue; if(w<=8&&h>=10) bars.push(f); else if(w>=30&&h>=10) boxes.push(f); }
-  for(const bx of boxes){ const b=bars.find(bar=>Math.abs(bar.x1-bx.x1)<10&&bar.y1<bx.y2&&bar.y2>bx.y1&&(Math.min(bar.y2,bx.y2)-Math.max(bar.y1,bx.y1))>(bx.y2-bx.y1)*0.5); if(b) bx.border=b.rgb; }
-  return {imgs,boxes};
+  const cand=[], bars=[], dots=[];
+  for(const f of fills){ const w=f.x2-f.x1, h=f.y2-f.y1;
+    if(w<=7&&h<=7&&w>=1.5&&h>=1.5&&Math.abs(w-h)<2.5){ dots.push(f); continue; }   // 글머리표 점
+    if(lum(f.rgb)>0.995) continue; if(w*h>pageA*0.6) continue;
+    if(w<=8&&h>=10) bars.push(f); else if(w>=30&&h>=10) cand.push(f); }
+  const boxes=[];
+  for(const bx of cand){ const b=bars.find(bar=>Math.abs(bar.x1-bx.x1)<10&&bar.y1<bx.y2&&bar.y2>bx.y1&&(Math.min(bar.y2,bx.y2)-Math.max(bar.y1,bx.y1))>(bx.y2-bx.y1)*0.5); if(b) bx.border=b.rgb;
+    if(b||lum(bx.rgb)<=0.96) boxes.push(bx); }   // 거의 흰 상자는 띠가 있을 때만 (종이 바탕과 구별)
+  return {imgs,boxes,dots};
 }
 // 쪽을 한 번 그린다 — 그림 오려내기와 글자 색 재기에 같이 쓴다
 async function renderPageCanvas(page,vp1,wantImgs){
@@ -873,7 +891,7 @@ async function getFlowBlocks(n){
     let gfx={imgs:[],boxes:[]}; try{ gfx=await pageGraphics(page,vp1); }catch(e){ console.warn('graphics',n,e); }
     try{ resolveFontFlags(page,t); }catch(e){}
     let cv=null; try{ cv=await renderPageCanvas(page,vp1,gfx.imgs.length>0); sampleTextColors(cv,t); }catch(e){ console.warn('render',n,e); }
-    const paras=buildParagraphs(pageLines(t),regime,vp1,gfx.boxes);
+    const paras=buildParagraphs(pageLines(t),regime,vp1,gfx.boxes,gfx.dots);
     let imgs=[]; try{ if(gfx.imgs.length&&cv) imgs=await cropImages(page,gfx.imgs,vp1,cv); }catch(e){ console.warn('images',n,e); }
     if(cv){ cv.c.width=0; cv.c.height=0; }
     const blocks=[...paras,...imgs].sort((p,q)=>p.top-q.top);
@@ -916,7 +934,7 @@ function segsHTML(segs,text){
 }
 const rgbCss=c=>`rgb(${c[0]},${c[1]},${c[2]})`;
 // 「이름 | 대사」 꼴이면 앞의 이름을 굵게 — 크랙 로그의 말하는 사람 표시
-const NAME_RE=/^([^\p{L}\p{N}\s]{0,3}\s?)([\p{L}\p{N}·\s]{1,14}?)\s*[|｜](?=\s|$)/u;
+const NAME_RE=/^([^\p{L}\p{N}\s]{0,3}\s?)([\p{L}\p{N}·\s]{1,14}?)\s*[|｜](?=[\s"'“‘「『(\[]|$)/u;
 function boldName(segs,text){
   const m=NAME_RE.exec(text||''); if(!m) return segs; const L=m[1].length+m[2].length; if(L<1) return segs;
   const out=[]; let pos=0;
